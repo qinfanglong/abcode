@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABcode - AI Agent 工具</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f6ef7'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>AB</text></svg>">
+</head>
+<body>
+<!-- 更新通知横幅 -->
+<div id="update-banner" style="display:none; position: fixed; top: 0; left: 0; right: 0; z-index: 200; background: linear-gradient(135deg, #4f6ef7 0%, #3d5af1 100%); color: white; padding: 10px 20px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+  <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;">
+    <div>
+      <span id="banner-text">🔄 检查更新中...</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button id="banner-update-btn" onclick="showUpdateDialog()" style="display:none; padding: 4px 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 12px;">
+        查看更新
+      </button>
+      <button onclick="dismissBanner()" style="padding: 4px 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.2); color: white; cursor: pointer; font-size: 12px;">
+        稍后提醒
+      </button>
+    </div>
+  </div>
+</div>
+<div id="app">
+  <!-- 左侧边栏 -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-logo">AB</div>
+      <div class="brand-text">
+        <h1>ABcode</h1>
+        <span>AI Agent Studio</span>
+      </div>
+    </div>
+    <button id="new-chat-btn" class="btn-new-chat">＋ 新建会话</button>
+    <div id="conv-list" class="conv-list"></div>
+    <div class="sidebar-footer">
+      <button id="team-btn" class="btn-sidebar">👥 团队协作</button>
+      <button id="expert-btn" class="btn-sidebar">🎯 专家套件</button>
+      <button id="workflow-btn" class="btn-sidebar">⚡ 工作流</button>
+      <button id="tools-btn" class="btn-sidebar">🧩 技能 / MCP / 连接器</button>
+      <button id="kb-btn" class="btn-sidebar">📚 知识库</button>
+      <button id="cron-btn" class="btn-sidebar">⏰ 定时任务</button>
+      <button id="channel-btn" class="btn-sidebar">📡 频道管理</button>
+      <button id="settings-btn" class="btn-sidebar">⚙ 设置</button>
+    </div>
+  </aside>
+
+  <!-- 主区域 -->
+  <main id="main">
+    <header id="topbar">
+      <div id="conv-title">新对话</div>
+      <div class="topbar-right">
+        <div class="theme-switcher">
+          <button class="theme-btn active" data-theme="light" title="亮色主题">☀️</button>
+          <button class="theme-btn" data-theme="dark" title="暗色主题">🌙</button>
+          <button class="theme-btn" data-theme="sepia" title="护眼主题">📜</button>
+        </div>
+        <button id="convtools-btn" class="btn-convtools" title="本会话工具配置">🔧</button>
+        <label class="switch-label"><input type="checkbox" id="agent-switch" checked> Agent</label>
+        <select id="provider-select" title="选择供应商"></select>
+        <select id="model-select" title="选择模型"></select>
+      </div>
+    </header>
+
+    <div id="chat-area">
+      <div id="welcome" class="welcome">
+        <div class="welcome-logo">AB</div>
+        <h2>你好，我是 ABcode</h2>
+        <p>你的 AI Agent 工具 · 支持 DeepSeek / OpenAI / 通义 / Ollama 本地模型</p>
+        <div class="welcome-tips">
+          <div class="tip">💬 多会话管理</div>
+          <div class="tip">⚡ 流式输出</div>
+          <div class="tip">🔌 多模型接入</div>
+          <div class="tip">🛠 Agent 工具调用</div>
+          <div class="tip">📚 知识库 RAG</div>
+          <div class="tip">⏰ 定时任务</div>
+        </div>
+      </div>
+      <div id="messages"></div>
+    </div>
+
+    <footer id="input-bar">
+      <div id="attach-preview" class="attach-preview"></div>
+      <div class="streaming-indicator" id="streaming-indicator">
+        <div class="dot-pulse"><span></span><span></span><span></span></div>
+        <span id="streaming-text">正在思考...</span>
+      </div>
+      <div class="input-toolbar">
+        <button class="tb-toggle active" data-tb="kb" title="知识库检索（RAG）">📚 知识库</button>
+        <button class="tb-toggle active" data-tb="skills" title="启用技能插件">🧩 Skills</button>
+        <button class="tb-toggle active" data-tb="mcp" title="启用 MCP 服务器">🔌 MCP</button>
+        <button class="tb-toggle" data-tb="thinking" title="显示思考过程">💭 思考</button>
+      </div>
+      <div class="input-row">
+        <button id="attach-btn" class="icon-btn" title="上传图片/视频/文件">📎</button>
+        <button id="kb-ref-btn" class="icon-btn kb-ref" title="引用知识库（Ctrl+K）">📚</button>
+        <button id="voice-btn" class="icon-btn" title="语音输入（按住说话）">🎤</button>
+        <textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
+        <button id="send-btn" title="发送">➤</button>
+        <button id="stop-btn" title="停止生成" style="display:none">■</button>
+        <input type="file" id="file-input" accept="image/*,video/*,audio/*,.txt,.md,.pdf,.json,.csv" style="display:none" multiple>
+      </div>
+      <!-- 知识库引用搜索面板 -->
+      <div id="kb-ref-panel" class="kb-ref-panel" style="display:none">
+        <div class="kb-ref-search">
+          <input id="kb-ref-input" placeholder="搜索知识库..." autocomplete="off">
+          <button id="kb-ref-close" class="kb-ref-close">✕</button>
+        </div>
+        <div id="kb-ref-results" class="kb-ref-results"></div>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<!-- 团队协作弹窗 -->
+<div id="team-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:700px">
+    <div class="modal-header">
+      <h2>👥 团队协作</h2>
+      <button class="modal-close" onclick="closeModal('team-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="team-tabs">
+        <button class="team-tab active" data-tab="members">成员管理</button>
+        <button class="team-tab" data-tab="shared">共享对话</button>
+        <button class="team-tab" data-tab="activity">活动日志</button>
+      </div>
+      <div id="team-tab-content">
+        <div id="team-members-tab" class="team-tab-panel active">
+          <div class="team-header">
+            <h3>团队成员</h3>
+            <button class="btn-add" onclick="showAddMemberForm()">＋ 添加成员</button>
+          </div>
+          <div id="add-member-form" class="add-form" style="display:none">
+            <input id="member-name" placeholder="姓名">
+            <input id="member-email" placeholder="邮箱">
+            <select id="member-role">
+              <option value="admin">管理员</option>
+              <option value="member" selected>成员</option>
+              <option value="viewer">观察者</option>
+            </select>
+            <button class="btn-save" onclick="saveMember()">保存</button>
+            <button class="btn-cancel" onclick="hideAddMemberForm()">取消</button>
+          </div>
+          <div id="team-members-list" class="team-list"></div>
+        </div>
+        <div id="team-shared-tab" class="team-tab-panel" style="display:none">
+          <div id="team-shared-list" class="team-list"></div>
+        </div>
+        <div id="team-activity-tab" class="team-tab-panel" style="display:none">
+          <div id="team-activity-list" class="team-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 专家套件弹窗 -->
+<div id="expert-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:800px">
+    <div class="modal-header">
+      <h2>🎯 专家套件</h2>
+      <button class="modal-close" onclick="closeModal('expert-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="expert-tabs">
+        <button class="expert-tab active" data-category="all">全部</button>
+        <button class="expert-tab" data-category="coding">编程</button>
+        <button class="expert-tab" data-category="writing">写作</button>
+        <button class="expert-tab" data-category="analysis">分析</button>
+        <button class="expert-tab" data-category="research">研究</button>
+        <button class="expert-tab" data-category="language">语言</button>
+        <button class="expert-tab" data-category="security">安全</button>
+        <button class="expert-tab" data-category="product">产品</button>
+      </div>
+      <div id="expert-grid" class="expert-grid"></div>
+      <div id="expert-detail" class="expert-detail" style="display:none">
+        <div class="expert-detail-header">
+          <span id="expert-detail-icon" class="expert-icon"></span>
+          <div>
+            <h3 id="expert-detail-name"></h3>
+            <p id="expert-detail-desc"></p>
+          </div>
+          <button class="btn-use-expert" onclick="useCurrentExpert()">使用此专家</button>
+        </div>
+        <div class="expert-detail-body">
+          <label>系统提示词</label>
+          <textarea id="expert-detail-prompt" rows="6" readonly></textarea>
+          <label>可用工具</label>
+          <div id="expert-detail-tools" class="expert-tools"></div>
+          <label>推荐模型</label>
+          <div id="expert-detail-model" class="expert-model"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 工作流弹窗 -->
+<div id="workflow-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:1100px; max-width:95vw;">
+    <div class="modal-header">
+      <h2>⚡ 工作流</h2>
+      <button class="modal-close" onclick="closeModal('workflow-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <!-- 工作流列表视图 -->
+      <div id="wf-list-view">
+        <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; gap:8px;">
+            <button class="btn-save" onclick="createNewWorkflow()">＋ 新建工作流</button>
+            <button class="btn-test" onclick="showWfTemplates()">📋 模板库</button>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="wf-view-btn active" data-view="list" onclick="switchWfView('list')">列表</button>
+            <button class="wf-view-btn" data-view="executions" onclick="switchWfView('executions')">执行记录</button>
+          </div>
+        </div>
+        <div id="wf-list-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
+          <!-- 动态填充 -->
+        </div>
+      </div>
+      
+      <!-- 工作流编辑器视图 -->
+      <div id="wf-editor-view" style="display:none;">
+        <div style="padding:10px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--input-bg);">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button class="btn-test" onclick="switchWfView('list')" style="padding:4px 10px; font-size:12px;">← 返回</button>
+            <input id="wf-name-input" placeholder="工作流名称" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-weight:600; width:200px;">
+            <input id="wf-desc-input" placeholder="描述（可选）" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; width:250px;">
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-test" onclick="saveCurrentWorkflow()">💾 保存</button>
+            <button class="btn-save" onclick="runCurrentWorkflow()">▶ 运行</button>
+          </div>
+        </div>
+        <!-- 节点工具栏 -->
+        <div id="wf-node-toolbar" style="padding:10px 20px; border-bottom:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap;">
+          <span class="wf-node-btn" data-type="start" title="开始节点">🏁 开始</span>
+          <span class="wf-node-btn" data-type="llm" title="LLM调用">🤖 LLM</span>
+          <span class="wf-node-btn" data-type="kb_search" title="知识库RAG检索">📚 知识检索</span>
+          <span class="wf-node-btn" data-type="classifier" title="意图分类路由">🎯 意图分类</span>
+          <span class="wf-node-btn" data-type="extractor" title="LLM参数提取">📑 参数提取</span>
+          <span class="wf-node-btn" data-type="tool" title="工具调用">🔧 工具</span>
+          <span class="wf-node-btn" data-type="connector" title="查询数据连接器">🗄️ 数据连接</span>
+          <span class="wf-node-btn" data-type="condition" title="条件分支">🔀 条件</span>
+          <span class="wf-node-btn" data-type="variable" title="变量操作">📝 变量</span>
+          <span class="wf-node-btn" data-type="text_process" title="文本处理">✂️ 文本处理</span>
+          <span class="wf-node-btn" data-type="aggregator" title="变量聚合">🧮 聚合</span>
+          <span class="wf-node-btn" data-type="code" title="代码执行">💻 代码</span>
+          <span class="wf-node-btn" data-type="http" title="HTTP请求">🌐 HTTP</span>
+          <span class="wf-node-btn" data-type="template" title="模板处理">📄 模板</span>
+          <span class="wf-node-btn" data-type="stop" title="直接回复/提前终止">🛑 直达</span>
+          <span class="wf-node-btn" data-type="end" title="结束节点">🏁 结束</span>
+        </div>
+        <!-- 画布区域 -->
+        <div id="wf-canvas-container" style="position:relative; height:500px; overflow:auto; background:var(--chat-bg);">
+          <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:2000px; height:2000px; pointer-events:none;"></svg>
+          <div id="wf-canvas" style="position:relative; width:2000px; height:2000px;">
+            <!-- 节点动态渲染 -->
+          </div>
+        </div>
+        <!-- 节点配置面板 -->
+        <div id="wf-node-config" style="display:none; padding:16px 20px; border-top:1px solid var(--border); background:var(--input-bg); max-height:250px; overflow-y:auto;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h4 id="wf-config-title" style="margin:0;">节点配置</h4>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-test" onclick="deleteSelectedNode()" style="font-size:12px; color:#ef4444;">🗑 删除</button>
+              <button class="btn-test" onclick="closeNodeConfig()" style="font-size:12px;">✕ 关闭</button>
+            </div>
+          </div>
+          <div id="wf-config-content">
+            <!-- 动态填充 -->
+          </div>
+        </div>
+      </div>
+      
+      <!-- 模板库视图 -->
+      <div id="wf-templates-view" style="display:none;">
+        <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; gap:8px;">
+            <button class="btn-test" onclick="switchWfView('list')">← 返回</button>
+          </div>
+          <div class="wf-template-tabs">
+            <button class="wf-tab active" data-cat="all" onclick="filterWfTemplates('all')">全部</button>
+            <button class="wf-tab" data-cat="basic" onclick="filterWfTemplates('basic')">基础</button>
+            <button class="wf-tab" data-cat="advanced" onclick="filterWfTemplates('advanced')">高级</button>
+            <button class="wf-tab" data-cat="coding" onclick="filterWfTemplates('coding')">编程</button>
+            <button class="wf-tab" data-cat="writing" onclick="filterWfTemplates('writing')">写作</button>
+          </div>
+        </div>
+        <div id="wf-templates-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
+          <!-- 动态填充 -->
+        </div>
+      </div>
+      
+      <!-- 运行结果面板 -->
+      <div id="wf-run-result" style="display:none; padding:16px 20px; border-top:1px solid var(--border); background:var(--input-bg); max-height:300px; overflow-y:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h4 style="margin:0;">运行结果</h4>
+          <button class="btn-test" onclick="$('#wf-run-result').style.display='none'" style="font-size:12px;">✕ 关闭</button>
+        </div>
+        <div id="wf-run-output"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div id="settings-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>⚙ 设置</h2>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- 个人偏好设置 -->
+      <div class="settings-section preference-section">
+        <h3>👤 个人偏好设置</h3>
+        <p class="hint">管理你的个性化配置，所有偏好自动保存到本地</p>
+
+        <div class="pref-group">
+          <h4>🎨 主题风格</h4>
+          <div class="theme-picker">
+            <button class="theme-pick-btn" data-theme="light" title="亮色主题">
+              <span class="theme-preview light-preview"></span>
+              <span>亮色</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="dark" title="暗色主题">
+              <span class="theme-preview dark-preview"></span>
+              <span>暗色</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="sepia" title="护眼主题">
+              <span class="theme-preview sepia-preview"></span>
+              <span>护眼</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="pref-group">
+          <h4>📝 对话外观</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label>字体</label>
+              <select id="font-family-select">
+                <option value='"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif'>苹方 / 微软雅黑</option>
+                <option value='"SF Pro Text", "Helvetica Neue", sans-serif'>SF Pro</option>
+                <option value='"Noto Sans SC", sans-serif'>Noto Sans</option>
+                <option value='"Source Han Sans", sans-serif'>思源黑体</option>
+                <option value='"Microsoft YaHei", sans-serif'>微软雅黑</option>
+                <option value='"Hiragino Sans GB", sans-serif'>冬青黑体</option>
+                <option value='system-ui, sans-serif'>系统默认</option>
+                <option value='serif'>宋体 / 衬线体</option>
+              </select>
+            </div>
+            <div class="pref-item">
+              <label>字号</label>
+              <div class="font-size-control">
+                <button class="font-size-btn" onclick="adjustFontSize(-1)">A-</button>
+                <span id="font-size-display" class="font-size-value">15</span>
+                <button class="font-size-btn" onclick="adjustFontSize(1)">A+</button>
+              </div>
+            </div>
+            <div class="pref-item">
+              <label>行高</label>
+              <select id="line-height-select">
+                <option value="1.5">紧凑</option>
+                <option value="1.7" selected>标准</option>
+                <option value="2.0">宽松</option>
+                <option value="2.4">超宽松</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref-group">
+          <h4>💡 智能辅助</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="suggestion-toggle" checked> 提示词建议
+              </label>
+              <span class="pref-desc">对话完成后自动生成 1-3 个提示词建议</span>
+            </div>
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="agent-switch-pref" checked> Agent 模式
+              </label>
+              <span class="pref-desc">启用 Agent 自主决策和工具调用能力</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref-group">
+          <h4>🌐 语言与区域</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label>界面语言</label>
+              <select id="lang-select">
+                <option value="zh-CN" selected>简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div class="pref-item">
+              <label>时区</label>
+              <select id="tz-select">
+                <option value="Asia/Shanghai" selected>Asia/Shanghai (UTC+8)</option>
+                <option value="America/New_York">America/New_York (UTC-5)</option>
+                <option value="Europe/London">Europe/London (UTC+0)</option>
+                <option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref-actions">
+          <button class="btn-reset-pref" onclick="resetPreferences()">恢复默认设置</button>
+          <button class="btn-export-pref" onclick="exportPreferences()">导出配置</button>
+        </div>
+      </div>
+
+      <!-- 模型供应商 -->
+      <div class="settings-section">
+        <h3>🔌 模型供应商</h3>
+        <p class="hint">支持所有 OpenAI 兼容接口（DeepSeek / OpenAI / 通义 / Kimi / vLLM 等）及 Ollama 本地模型</p>
+        <div id="provider-list"></div>
+        <button id="add-provider-btn" class="btn-add">＋ 添加供应商</button>
+      </div>
+
+      <!-- 预设模板 -->
+      <div class="settings-section">
+        <h3>📦 预设模板（免费模型）</h3>
+        <p class="hint">一键添加常用供应商，区分免费模型和自定义配置</p>
+        <div id="preset-list" class="preset-list">
+          <button class="preset" data-name="DeepSeek" data-url="https://api.deepseek.com" data-key="sk-" data-models="deepseek-chat,deepseek-reasoner" data-free="deepseek-chat" data-ctx="65536">DeepSeek</button>
+          <button class="preset" data-name="OpenAI" data-url="https://api.openai.com/v1" data-key="sk-" data-models="gpt-4o,gpt-4o-mini,gpt-3.5-turbo" data-free="gpt-3.5-turbo" data-ctx="128000">OpenAI</button>
+          <button class="preset" data-name="通义千问 (DashScope)" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="qwen3.7-max,qwen3.7-plus,qwen3.6-plus,deepseek-v4-pro,glm-5.2" data-free="qwen3.6-plus" data-ctx="1000000">通义千问</button>
+          <button class="preset" data-name="阿里云 Token Plan" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="qwen3.7-plus,qwen3.7-max,qwen3.6-plus,qwen3.6-flash,deepseek-v4-pro,deepseek-v4-flash,deepseek-v3.2,glm-5.2,glm-5.1,glm-5,MiniMax-M2.5,kimi-k2.6,kimi-k2.5" data-free="qwen3.6-flash" data-ctx="1000000">阿里云 Token Plan</button>
+          <button class="preset" data-name="阿里云 Coding Plan" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="qwen3.6-plus,qwen3.5-plus,glm-5.2,glm-5.1,glm-5,glm-4.7,MiniMax-M2.5,kimi-k2.5,qwen3-max-2026-01-23,qwen3-coder-next,qwen3-coder-plus" data-free="qwen3.6-plus" data-ctx="1000000">阿里云 Coding Plan</button>
+          <button class="preset" data-name="MiMo (通义)" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="mimo-v2.5-pro,mimo-v2.5" data-free="mimo-v2.5" data-ctx="128000">MiMo</button>
+          <button class="preset" data-name="ModelScope" data-url="https://api-inference.modelscope.cn/v1" data-key="sk-" data-models="Qwen/Qwen3.5-122B-A10B,ZhipuAI/GLM-5" data-free="Qwen/Qwen3.5-122B-A10B" data-ctx="128000">ModelScope</button>
+          <button class="preset" data-name="Kimi (Moonshot)" data-url="https://api.moonshot.cn/v1" data-key="sk-" data-models="moonshot-v1-8k,moonshot-v1-32k,moonshot-v1-128k" data-free="moonshot-v1-8k" data-ctx="128000">Kimi</button>
+          <button class="preset" data-name="智谱AI (GLM)" data-url="https://open.bigmodel.cn/api/paas/v4" data-key="sk-" data-models="glm-4,glm-4-flash,glm-3-turbo" data-free="glm-4-flash" data-ctx="128000">智谱AI</button>
+          <button class="preset" data-name="硅基流动" data-url="https://api.siliconflow.cn/v1" data-key="sk-" data-models="Qwen/Qwen3-8B,deepseek-ai/DeepSeek-V3,THUDM/glm-4-9b-chat" data-free="Qwen/Qwen3-8B" data-ctx="32000">硅基流动</button>
+          <button class="preset" data-name="Ollama 本地" data-url="http://localhost:11434" data-key="" data-models="" data-free="" data-ctx="32000">Ollama 本地</button>
+          <button class="preset" data-name="OpenRouter" data-url="https://openrouter.ai/api/v1" data-key="sk-or-" data-models="meta-llama/llama-3.1-8b-instruct:free,google/gemma-2-9b-it:free,mistralai/mistral-7b-instruct:free" data-free="meta-llama/llama-3.1-8b-instruct:free" data-ctx="32000">OpenRouter</button>
+        </div>
+        <div id="preset-info" class="preset-info" style="display:none;margin-top:12px;padding:10px;border-radius:8px;background:var(--msg-user-bg);font-size:12px"></div>
+      </div>
+
+      <!-- 联网搜索 -->
+      <div class="settings-section">
+        <h3>🔍 联网搜索服务</h3>
+        <p class="hint">配置自建搜索服务，让 Agent 具备联网搜索能力。支持 SearXNG、Google CSE 或自定义 API。</p>
+        <label>搜索引擎类型</label>
+        <select id="search-engine" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+          <option value="searxng">SearXNG（推荐自建）</option>
+          <option value="google_cse">Google Custom Search</option>
+          <option value="custom">自定义 API</option>
+        </select>
+        <label>搜索服务地址</label>
+        <input id="search-url" placeholder="如: http://localhost:8080/search" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+        <label>API Key（可选）</label>
+        <input id="search-key" type="password" placeholder="如需要认证则填写" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+        <div class="form-actions">
+          <button class="btn-test" onclick="testSearchService()">🔌 测试连接</button>
+          <button class="btn-save" onclick="saveSearchSettings()">保存搜索设置</button>
+        </div>
+        <div id="search-test-result" class="test-result"></div>
+        <p class="hint" style="margin-top:12px">
+          <b>SearXNG 自建教程：</b><br>
+          1. <code>docker run -d -p 8080:8080 searxng/searxng</code><br>
+          2. 地址填 <code>http://localhost:8080/search</code><br>
+          3. 支持 Google、Bing、DuckDuckGo 等多引擎聚合
+        </p>
+      </div>
+      <div class="settings-section">
+        <h3>在线更新</h3>
+        <p class="hint">当前版本 <span id="cur-version">-</span></p>
+        
+        <!-- 自动更新设置 -->
+        <div class="pref-group" style="margin-bottom: 16px;">
+          <h4>自动更新</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label>
+                <input type="checkbox" id="auto-update-enabled" checked onchange="saveAutoUpdateSettings()"> 
+                启用自动检查更新
+              </label>
+              <span class="pref-desc">启动时自动检查新版本</span>
+            </div>
+            <div class="pref-item">
+              <label>检查间隔</label>
+              <select id="auto-update-interval" onchange="saveAutoUpdateSettings()">
+                <option value="6">每6小时</option>
+                <option value="12">每12小时</option>
+                <option value="24" selected>每24小时</option>
+                <option value="48">每48小时</option>
+                <option value="168">每7天</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 更新源配置 -->
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">更新源地址</label>
+          <input id="update-url" placeholder="更新源 JSON 地址（可选）" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        
+        <div class="form-actions">
+          <button class="btn-save" onclick="checkUpdate()">🔄 检查更新</button>
+          <button class="btn-test" onclick="loadUpdateStatus()">📊 查看状态</button>
+        </div>
+        
+        <div id="update-result" class="test-result"></div>
+        
+        <!-- 更新进度条 -->
+        <div id="update-progress" style="display:none; margin-top: 12px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span id="update-progress-text" style="font-size: 12px; color: var(--text-secondary);">准备中...</span>
+            <span id="update-progress-percent" style="font-size: 12px; color: var(--primary);">0%</span>
+          </div>
+          <div style="height: 6px; background: var(--input-bg); border-radius: 3px; overflow: hidden;">
+            <div id="update-progress-bar" style="height: 100%; background: var(--primary); width: 0%; transition: width 0.3s;"></div>
+          </div>
+        </div>
+        
+        <!-- 更新历史 -->
+        <div style="margin-top: 16px;">
+          <button class="btn-test" onclick="toggleUpdateHistory()" style="font-size: 12px;">
+            📋 更新历史 <span id="update-history-count">(0)</span>
+          </button>
+          <div id="update-history" style="display:none; margin-top: 8px; max-height: 200px; overflow-y: auto;">
+            <!-- 动态填充 -->
+          </div>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>关于</h3>
+        <p class="hint">ABcode v0.3.0 · AI Agent 工具 · 数据存储于本地</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 供应商编辑弹窗 -->
+<div id="provider-modal" class="modal" style="display:none">
+  <div class="modal-content provider-form" style="width:560px">
+    <div class="modal-header">
+      <h2 id="provider-modal-title">添加供应商</h2>
+      <button class="modal-close" onclick="closeProviderModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label>名称</label>
+      <input id="pf-name" placeholder="如: DeepSeek">
+      <label>Base URL</label>
+      <input id="pf-url" placeholder="https://api.deepseek.com">
+      <label>API Key</label>
+      <input id="pf-key" type="password" placeholder="sk-...">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+        <label style="margin:0;flex:1">模型列表（逗号分隔）</label>
+        <button class="fetch-models-btn" id="fetch-models-btn" onclick="fetchModels()">🔍 一键获取模型列表</button>
+      </div>
+      <input id="pf-models" placeholder="deepseek-chat, deepseek-reasoner">
+      <div id="model-tags-box" class="model-tags-box" style="display:none;margin-top:8px"></div>
+      <label>默认模型</label>
+      <input id="pf-default" placeholder="deepseek-chat">
+      <label>最大上下文长度（tokens）</label>
+      <input id="pf-context" type="number" placeholder="如: 128000" class="context-input">
+      <div class="context-hint">设置模型支持的最大上下文窗口，影响长文本处理能力。常见值：4096 / 32000 / 128000 / 1000000</div>
+      <div class="form-actions">
+        <button class="btn-test" onclick="testProvider()">🔌 测试连接</button>
+        <button class="btn-save" onclick="saveProvider()">保存</button>
+      </div>
+      <div id="provider-test-result" class="test-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库弹窗 -->
+<div id="kb-modal" class="modal" style="display:none">
+  <div class="modal-content kb-content">
+    <div class="modal-header">
+      <h2>📚 知识库</h2>
+      <button class="modal-close" onclick="closeKb()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="kb-upload">
+        <input type="file" id="kb-file" multiple accept=".txt,.md,.csv,.json,.log,.py,.js,.html,.css">
+        <button class="btn-save" onclick="uploadKb()">上传文档</button>
+        <p class="hint" style="margin-top:8px">支持 txt/md/csv/json/代码等文本文件（≤10MB）。上传后自动分块索引，提问时会自动检索相关内容。</p>
+      </div>
+      <div id="kb-doc-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 定时任务弹窗 -->
+<div id="cron-modal" class="modal" style="display:none">
+  <div class="modal-content cron-content">
+    <div class="modal-header">
+      <h2>⏰ 定时任务</h2>
+      <button class="modal-close" onclick="closeCron()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="cron-form">
+        <label>任务名称</label>
+        <input id="cj-name" placeholder="如: 每日新闻摘要">
+        <label>任务内容（prompt）</label>
+        <textarea id="cj-prompt" rows="2" placeholder="如: 搜索今天的重要新闻并总结"></textarea>
+        <div class="cron-row">
+          <div>
+            <label>固定间隔（分钟）</label>
+            <input id="cj-interval" type="number" min="0" placeholder="0=不使用" value="0">
+          </div>
+          <div>
+            <label>每日定时（HH:MM）</label>
+            <input id="cj-schedule" placeholder="如: 09:00" value="">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-save" onclick="saveCron()">＋ 添加任务</button>
+        </div>
+      </div>
+      <div id="cron-job-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 技能/MCP/连接器管理弹窗 -->
+<div id="tools-modal" class="modal" style="display:none">
+  <div class="modal-content tools-content">
+    <div class="modal-header">
+      <h2>🧩 扩展能力</h2>
+      <button class="modal-close" onclick="closeTools()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tabs">
+        <button class="tab active" data-tab="skills" onclick="switchTab('skills')">Skills 技能</button>
+        <button class="tab" data-tab="mcp" onclick="switchTab('mcp')">MCP 服务器</button>
+        <button class="tab" data-tab="connectors" onclick="switchTab('connectors')">数据连接器</button>
+      </div>
+
+      <!-- Skills -->
+      <div id="tab-skills" class="tab-panel">
+        <p class="hint">技能 = 自定义 Python 工具，自动注册为 Agent 可调用的工具。可在「会话工具」中按会话启用。</p>
+        <div id="skill-list"></div>
+        <div class="sub-form">
+          <h4>＋ 新建技能</h4>
+          <label>名称</label><input id="sk-name" placeholder="如: 汇率查询">
+          <label>描述</label><input id="sk-desc" placeholder="这个技能做什么">
+          <label>代码（Python，定义工具函数）</label>
+          <textarea id="sk-code" rows="6" placeholder='def calc(expr: str):&#10;    """计算表达式"""&#10;    import math&#10;    return str(eval(expr))'></textarea>
+          <div class="form-actions">
+            <button class="btn-save" onclick="saveSkill()">保存技能</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP -->
+      <div id="tab-mcp" class="tab-panel" style="display:none">
+        <p class="hint">连接 MCP (Model Context Protocol) 服务器，自动发现并使用其工具。支持 stdio 子进程和 HTTP 两种传输。</p>
+        <div id="mcp-list"></div>
+        <div class="sub-form">
+          <h4>＋ 添加 MCP 服务器</h4>
+          <label>名称</label><input id="mcp-name" placeholder="如: 文件服务器">
+          <label>传输方式</label>
+          <select id="mcp-transport">
+            <option value="stdio">stdio（本地命令）</option>
+            <option value="http">HTTP（远程服务）</option>
+            <option value="sse">SSE（Server-Sent Events）</option>
+            <option value="websocket">WebSocket（双向实时）</option>
+            <option value="unix">Unix Socket（本地IPC）</option>
+            <option value="tcp">TCP（原始TCP连接）</option>
+          </select>
+          <label id="mcp-cmd-label">启动命令</label><input id="mcp-command" placeholder="如: npx -y @modelcontextprotocol/server-filesystem">
+          <label id="mcp-args-label">参数（JSON 数组）</label><input id="mcp-args" placeholder='["/path"]'>
+          <label id="mcp-url-label" style="display:none">服务器 URL / Socket 路径</label><input id="mcp-url" placeholder="https://mcp.example.com/mcp 或 /tmp/mcp.sock" style="display:none">
+          <label id="mcp-headers-label" style="display:none">自定义请求头（JSON 对象）</label><textarea id="mcp-headers" rows="2" style="display:none" placeholder='{"Authorization": "Bearer xxx"}'></textarea>
+          <div class="form-actions">
+            <button class="btn-test" onclick="testMcp()">🔌 测试连接</button>
+            <button class="btn-save" onclick="saveMcp()">保存</button>
+          </div>
+          <div id="mcp-test-result" class="test-result"></div>
+        </div>
+      </div>
+
+      <!-- Connectors -->
+      <div id="tab-connectors" class="tab-panel" style="display:none">
+        <p class="hint">数据连接器让 Agent 能查询外部数据源（SQLite / CSV / JSON / HTTP / MySQL / PostgreSQL）。</p>
+        <div id="connector-list"></div>
+        <div class="sub-form">
+          <h4>＋ 添加连接器</h4>
+          <label>名称</label><input id="cn-name" placeholder="如: 订单数据库">
+          <label>类型</label>
+          <select id="cn-type" onchange="onConnectorTypeChange()">
+            <option value="sqlite">SQLite 数据库</option>
+            <option value="mysql">MySQL 数据库</option>
+            <option value="postgres">PostgreSQL 数据库</option>
+            <option value="csv">CSV 文件</option>
+            <option value="json">JSON 文件</option>
+            <option value="http">HTTP API</option>
+          </select>
+          <div id="cn-simple-fields">
+            <label id="cn-path-label">文件路径 / URL</label><input id="cn-config" placeholder="如: /Users/xxx/data.db">
+          </div>
+          <div id="cn-db-fields" style="display:none;">
+            <label>主机</label><input id="cn-host" placeholder="如: localhost">
+            <label>端口</label><input id="cn-port" placeholder="如: 3306">
+            <label>数据库名</label><input id="cn-database" placeholder="如: mydb">
+            <label>用户名</label><input id="cn-user" placeholder="如: root">
+            <label>密码</label><input id="cn-password" type="password" placeholder="密码">
+          </div>
+          <div class="form-actions">
+            <button class="btn-save" onclick="saveConnector()">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 会话工具选择弹窗 -->
+<div id="convtools-modal" class="modal" style="display:none">
+  <div class="modal-content convtools-content">
+    <div class="modal-header">
+      <h2>🔧 本会话工具</h2>
+      <button class="modal-close" onclick="closeConvTools()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">选择本会话启用的技能 / MCP / 连接器（留空 = 全部启用）</p>
+      <div class="ct-section">
+        <h4>🧩 技能</h4>
+        <div id="ct-skills" class="ct-checks"></div>
+      </div>
+      <div class="ct-section">
+        <h4>🔌 MCP 服务器</h4>
+        <div id="ct-mcps" class="ct-checks"></div>
+      </div>
+      <div class="ct-section">
+        <h4>📊 数据连接器</h4>
+        <div id="ct-connectors" class="ct-checks"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-save" onclick="saveConvTools()">保存本会话工具配置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道管理弹窗 -->
+<div id="channel-modal" class="modal" style="display:none">
+  <div class="modal-content channel-content">
+    <div class="modal-header">
+      <h2>📡 频道管理</h2>
+      <button class="modal-close" onclick="closeChannelModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="channel-stats">已激活 <strong id="channel-active-count">0</strong> 个频道</div>
+      <div class="channel-section-title">已激活</div>
+      <div id="channel-enabled-list" class="channel-enabled-list"></div>
+      <div class="channel-section-title">未激活</div>
+      <div id="channel-disabled-grid" class="channel-disabled-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 消息内容渲染器（Markdown 轻量渲染，本地化无外网依赖） -->
+<script src="marked.min.js"></script>
+<script src="highlight.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

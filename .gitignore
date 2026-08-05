@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# 运行时数据（用户数据、数据库、知识库、上传文件 —— 含用户私密配置，禁止入库）
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# 日志
+*.log
+logs/
+
+# Mac App 构建产物
+macapp/build/
+*.app
+*.zip
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 本地测试临时文件
+_wftest*.py
