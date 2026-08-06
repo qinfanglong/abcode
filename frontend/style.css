@@ -2238,6 +2238,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   background: rgba(79, 110, 247, 0.12);
   opacity: 1;
 }
+.tb-toggles .chat-kb-select {
+  max-width: 110px; padding: 2px 5px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 8px; background: white; color: var(--text-secondary); outline: none; cursor: pointer;
+}
+.tb-toggles .chat-kb-select:hover { border-color: var(--primary); color: var(--primary); }
+.tb-toggles .chat-kb-select:focus { border-color: var(--primary); }
 
 /* 左侧 Logo 头顶的思考模式开关（问号） */
 .brand-logo-wrap {

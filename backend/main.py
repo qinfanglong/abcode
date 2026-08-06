@@ -525,6 +525,7 @@ class ChatBody(BaseModel):
     history: list = []
     attachments: list = []
     kb_enabled: bool = True
+    kb_id: str = ""
     skills_enabled: bool = True
     mcp_enabled: bool = True
     thinking_mode: bool = False
@@ -546,8 +547,8 @@ def api_chat(body: ChatBody):
     if not model:
         raise HTTPException(400, "该供应商未配置模型")
 
-    # 根据开关决定是否启用知识库检索
-    rag_context = rag.build_context(body.message) if body.kb_enabled else None
+    # 根据开关决定是否启用知识库检索（kb_id 非空时只检索该库）
+    rag_context = rag.build_context(body.message, kb_id=body.kb_id or None) if body.kb_enabled else None
 
     db.add_message(body.conv_id, "user", body.message, body.attachments)
     conv = db.get_conversation(body.conv_id)

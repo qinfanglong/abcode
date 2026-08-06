@@ -20,6 +20,7 @@ let state = {
   suggestionEnabled: localStorage.getItem("abcode-suggestion") !== "false",
   // 工具栏开关
   tbKb: true,
+  chatKbId: localStorage.getItem("abcode-chat-kb") || "",
   tbSkills: true,
   tbMcp: true,
   tbThinking: false,
@@ -54,6 +55,12 @@ async function init() {
   applyParticleAnimationSettings();
   await Promise.all([loadProviders(), loadConvs()]);
   bindEvents();
+  loadChatKbSelect();
+  // 首次加载失败时重试（后端可能尚未就绪；占位符也算失败）
+  setTimeout(() => {
+    const sel = $("#chat-kb-select");
+    if (sel && sel.options.length < 2) loadChatKbSelect();
+  }, 3000);
   if (state.providers.length > 0) {
     // 优先恢复上次选择的供应商/模型
     const savedPid = localStorage.getItem("abcode-provider");
@@ -708,6 +715,7 @@ function stopWaves() {
 }
 let _pCtx = null;
 let _pParticles = [];
+let _pRaf = null;
 
 function startParticles(opts = {}) {
   const light = !!opts.light;
@@ -1250,10 +1258,31 @@ async function testSearchService() {
 
 // ===== 知识库 =====
 let currentKbId = "default";
+
+async function loadChatKbSelect() {
+  const sel = $("#chat-kb-select");
+  if (!sel) return;
+  try {
+    const kbs = await api("/api/kb/list");
+    let html = `<option value="">🌐 全部知识库</option>`;
+    html += kbs.map(k => `<option value="${escAttr(k.id)}">${esc(k.name)}</option>`).join("");
+    sel.innerHTML = html;
+    sel.value = state.chatKbId || "";
+  } catch (e) {
+    sel.innerHTML = `<option value="">🌐 全部知识库</option>`;
+  }
+}
+
+function onChatKbChange(kbId) {
+  state.chatKbId = kbId || "";
+  localStorage.setItem("abcode-chat-kb", state.chatKbId);
+}
+
 function openKb() {
   $("#kb-modal").style.display = "flex";
   loadKbList();
   loadKbDocs();
+  loadChatKbSelect();
   setupKbDropzone();
 }
 
@@ -4827,6 +4856,7 @@ async function doSend(text, attachFiles = null) {
         history: hist,
         attachments: attachments,
         kb_enabled: state.tbKb,
+        kb_id: state.chatKbId || "",
         skills_enabled: state.tbSkills,
         mcp_enabled: state.tbMcp,
         thinking_mode: state.tbThinking,
