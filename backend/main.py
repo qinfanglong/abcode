@@ -826,6 +826,13 @@ async def api_kb_upload(file: UploadFile = File(...)):
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "文件过大（>10MB）")
+    if len(content) == 0:
+        raise HTTPException(400, "文件为空")
+    ext = rag._ext(file.filename)
+    if ext in rag.UNSUPPORTED_EXTS:
+        raise HTTPException(400, f"不支持的文件类型 .{ext}（知识库仅支持文本格式）")
+    if rag._is_binary(content):
+        raise HTTPException(400, f"文件内容是二进制格式（{rag._binary_name(content)}），不是文本文件")
     doc_id, n = rag.add_document(file.filename, content)
     if not doc_id:
         raise HTTPException(400, "文档内容过少，无法建立知识库")

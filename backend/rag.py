@@ -26,6 +26,42 @@ TEXT_EXTS = {
 }
 UNSUPPORTED_EXTS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "zip", "rar", "7z", "png", "jpg", "jpeg", "gif", "bmp", "webp", "mp3", "mp4", "avi", "mov", "wav"}
 
+# 二进制文件魔数检测（即使扩展名伪装成 txt 也能识别）
+_BINARY_MAGICS = [
+    (b"PK\x03\x04", "ZIP/OOXML"),      # zip, docx, xlsx, pptx
+    (b"%PDF", "PDF"),
+    (b"\x89PNG", "PNG"),
+    (b"\xff\xd8\xff", "JPEG"),
+    (b"GIF8", "GIF"),
+    (b"BM", "BMP"),
+    (b"RIFF", "WAV/AVI"),
+    (b"\x00\x00\x01\xba", "MPEG"),
+    (b"\x1f\x8b", "GZIP"),
+    (b"7z\xbc\xaf\x27\x1c", "7ZIP"),
+    (b"Rar!", "RAR"),
+]
+
+
+def _is_binary(content: bytes):
+    """通过魔数检测二进制内容"""
+    head = content[:8]
+    for magic, _name in _BINARY_MAGICS:
+        if head.startswith(magic):
+            return True
+    # 文本启发式：含大量空字节视为二进制
+    if len(content) > 0 and content.count(b"\x00") > len(content) * 0.05:
+        return True
+    return False
+
+
+def _binary_name(content: bytes):
+    """返回检测到的二进制格式名称（用于错误提示）"""
+    head = content[:8]
+    for magic, name in _BINARY_MAGICS:
+        if head.startswith(magic):
+            return name
+    return "未知二进制"
+
 
 def init_kb():
     conn = get_conn()
@@ -70,6 +106,9 @@ def _decode_content(filename: str, content: bytes):
     """按文件类型解码为纯文本。返回 (text, ext)；不支持返回 (None, ext)"""
     ext = _ext(filename)
     if ext in UNSUPPORTED_EXTS:
+        return None, ext
+    # 魔数检测：伪装成文本的二进制文件也拒绝（避免污染知识库）
+    if _is_binary(content):
         return None, ext
     # 尝试多种编码
     for enc in ("utf-8", "utf-8-sig", "gb18030", "latin-1"):
@@ -202,8 +241,8 @@ _K1 = 1.5
 _B = 0.75
 
 
-def _tokenize(text):
-    """分词：英文/数字按词，中文按 bigram + 单字加权，返回 (tokens, counts)"""
+def _tokenize(text, for_query=False):
+    """分词：英文/数字按词，中文按 bigram（查询时可选保留单字用于短查询容错），返回 (tokens, counts)"""
     tokens = []
     # 英文/数字词
     for w in re.findall(r"[a-zA-Z0-9_]{2,}", text.lower()):
@@ -216,9 +255,10 @@ def _tokenize(text):
         else:
             for i in range(len(seg) - 1):
                 tokens.append(seg[i:i + 2])
-            # 单字也加入（提高召回，靠 BM25 频率排序压制噪音）
-            for ch in seg:
-                tokens.append(ch)
+            # 单字只用于索引（提高召回）；查询侧默认过滤，避免高频单字噪音
+            if not for_query:
+                for ch in seg:
+                    tokens.append(ch)
     return tokens
 
 
@@ -247,7 +287,10 @@ def _bm25_index():
 
 def search(query, top_k=5):
     """BM25 关键词检索，返回最相关片段列表（含命中词高亮信息）"""
-    q_terms = _tokenize(query)
+    q_terms = _tokenize(query, for_query=True)
+    # 短查询（无 bigram 命中可能）时回退到含单字的完整分词
+    if len(q_terms) <= 1 and len(re.findall(r"[\u4e00-\u9fff]", query)) >= 1:
+        q_terms = _tokenize(query, for_query=False)
     q_terms = list(dict.fromkeys(q_terms))  # 去重保序
     if not q_terms:
         return []
@@ -303,7 +346,9 @@ def search(query, top_k=5):
 def search_with_highlight(query, top_k=5):
     """检索 + 生成命中词高亮 HTML 片段（<mark>），前端可直接展示"""
     results = search(query, top_k)
-    q_terms = list(dict.fromkeys(_tokenize(query)))
+    q_terms = _tokenize(query, for_query=True)
+    if len(q_terms) <= 1 and len(re.findall(r"[\u4e00-\u9fff]", query)) >= 1:
+        q_terms = _tokenize(query, for_query=False)
     # 高亮用长度>=2 的词（单字 token 只做召回，不做高亮，避免噪音/嵌套）
     hl_terms = [t for t in q_terms if len(t) >= 2]
     hl_terms.sort(key=len, reverse=True)
