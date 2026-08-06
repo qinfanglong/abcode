@@ -60,6 +60,7 @@ jobs:
           $version = $env:VERSION.TrimStart('v')
           
           Write-Host "Checking available tools..."
+          Write-Host "7z: $(Get-Command 7z -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)"
           Write-Host "tar: $(Get-Command tar -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)"
           Write-Host "Current directory: $(Get-Location)"
           Write-Host "Files: $(Get-ChildItem | ForEach-Object { $_.Name })"
@@ -89,16 +90,32 @@ jobs:
           # Create dist directory
           New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
           
+          # Use 7-Zip if available, otherwise use tar
+          $use7z = $false
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+            $use7z = $true
+            Write-Host "Using 7-Zip for compression"
+          } else {
+            Write-Host "Using tar for compression"
+          }
+          
           # Binary package (just the app files)
-          $binaryName = "ABcode-windows-${version}.tar.gz"
+          $binaryName = "ABcode-windows-${version}.zip"
           Write-Host "Creating binary package: $binaryName"
-          tar -czf "dist_windows/$binaryName" backend frontend macapp scripts
+          if ($use7z) {
+            & 7z a -tzip "dist_windows/$binaryName" backend frontend macapp scripts
+          } else {
+            Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "scripts/*" -DestinationPath "dist_windows/$binaryName" -Force
+          }
           
           # Source package (with docs, scripts, etc.)
-          $sourceName = "ABcode-windows-source-${version}.tar.gz"
+          $sourceName = "ABcode-windows-source-${version}.zip"
           Write-Host "Creating source package: $sourceName"
-          tar -czf "dist_windows/$sourceName" `
-            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
+          if ($use7z) {
+            & 7z a -tzip "dist_windows/$sourceName" backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
+          } else {
+            Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "requirements.txt", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist_windows/$sourceName" -Force
+          }
           
           # Verify
           Get-ChildItem dist_windows/ | ForEach-Object { 
@@ -107,7 +124,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist_windows/*.tar.gz
+          path: dist_windows/*.zip
           if-no-files-found: ignore
 
   release:
