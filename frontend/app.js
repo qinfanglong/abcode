@@ -35,10 +35,22 @@ async function init() {
   await Promise.all([loadProviders(), loadConvs()]);
   bindEvents();
   if (state.providers.length > 0) {
-    state.currentProviderId = state.providers[0].id;
+    // 优先恢复上次选择的供应商/模型
+    const savedPid = localStorage.getItem("abcode-provider");
+    const savedModel = localStorage.getItem("abcode-model");
+    let pid = savedPid && state.providers.find(p => p.id === savedPid) ? savedPid : "";
+    // 否则优先本地 Ollama（无 Key 即可用），避免默认落在需要 Key 的网络模型上
+    if (!pid) {
+      const local = state.providers.find(p => isLocalProvider(p));
+      pid = local ? local.id : state.providers[0].id;
+    }
+    state.currentProviderId = pid;
     updateProviderSelect();
     const p = getProvider(state.currentProviderId);
-    if (p && p.models.length) state.currentModel = p.models[0];
+    let m = savedModel && p && (p.models || []).includes(savedModel) ? savedModel : "";
+    if (!m && p && p.models.length) m = p.models[0];
+    if (!m && p && p.default_model) m = p.default_model;
+    state.currentModel = m;
     updateModelSelect();
   }
 }
@@ -403,6 +415,33 @@ function agentFormTemplate(a) {
     `<label style="display:inline-flex; align-items:center; gap:4px; margin:4px 8px 4px 0; font-size:12px;">
       <input type="checkbox" class="agt-tool-cb" value="${t}" ${(a.builtin_tools || []).includes(t) ? 'checked' : ''}> ${t}
     </label>`).join('');
+  
+  // 构建模型下拉列表（分组：本地/网络）
+  const allProviders = state.providers || [];
+  const localProviders = allProviders.filter(p => isLocalProvider(p));
+  const networkProviders = allProviders.filter(p => !isLocalProvider(p));
+  let modelOptions = '<option value="">留空=自动</option>';
+  if (localProviders.length > 0) {
+    modelOptions += '<optgroup label="🏠 本地模型">';
+    localProviders.forEach(p => {
+      (p.models || []).forEach(m => {
+        const selected = a.model_preference === m ? 'selected' : '';
+        modelOptions += `<option value="${m}" ${selected}>${m} (${p.name})</option>`;
+      });
+    });
+    modelOptions += '</optgroup>';
+  }
+  if (networkProviders.length > 0) {
+    modelOptions += '<optgroup label="☁️ 网络模型">';
+    networkProviders.forEach(p => {
+      (p.models || []).forEach(m => {
+        const selected = a.model_preference === m ? 'selected' : '';
+        modelOptions += `<option value="${m}" ${selected}>${m} (${p.name})</option>`;
+      });
+    });
+    modelOptions += '</optgroup>';
+  }
+  
   return `
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
       <h3 style="margin:0; font-size:16px;">${a.id ? '✏️ 编辑智能体' : '＋ 新建智能体'}</h3>
@@ -417,7 +456,7 @@ function agentFormTemplate(a) {
     <div style="margin-top:10px;"><label class="agent-info-label">系统提示词</label><textarea id="agt-prompt" class="ncf-input" rows="5" placeholder="定义智能体的角色、能力、工作流程...">${esc(a.system_prompt || '')}</textarea></div>
     <div style="margin-top:10px;"><label class="agent-info-label">内置工具</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${toolChecks}</div></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
-      <div><label class="agent-info-label">模型偏好（可选）</label><input id="agt-model" class="ncf-input" value="${esc(a.model_preference || '')}" placeholder="留空=自动"></div>
+      <div><label class="agent-info-label">模型偏好（可选）</label><select id="agt-model" class="ncf-input" style="max-height:120px;">${modelOptions}</select></div>
       <div><label class="agent-info-label">温度</label><input id="agt-temp" class="ncf-input" type="number" step="0.1" min="0" max="2" value="${a.temperature ?? 0.7}"></div>
     </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
@@ -659,6 +698,12 @@ function renderConvList() {
 }
 
 // ===== 供应商 =====
+function isLocalProvider(p) {
+  if (!p || !p.base_url) return false;
+  const b = String(p.base_url).toLowerCase();
+  return b.includes("localhost") || b.includes("127.0.0.1") || b.includes("11434") || p.type === "ollama";
+}
+
 function getProvider(id) {
   return state.providers.find((p) => p.id === id);
 }
@@ -856,7 +901,7 @@ async function fetchModels() {
     alert("获取失败: " + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔍 一键获取模型列表";
+    btn.textContent = "🔍 获取全部";
   }
 }
 
@@ -879,6 +924,49 @@ function renderModelTags(models, freeModels) {
     };
     box.appendChild(tag);
   });
+}
+
+// ===== 获取免费模型列表 =====
+async function fetchFreeModels() {
+  const url = $("#pf-url").value.trim();
+  const key = $("#pf-key").value.trim();
+  if (!url) { alert("请先填写 Base URL"); return; }
+  const btn = $("#fetch-free-models-btn");
+  btn.disabled = true;
+  btn.textContent = "⏳ 获取中...";
+  try {
+    const r = await api("/api/providers/models", {
+      method: "POST",
+      body: JSON.stringify({ base_url: url, api_key: key }),
+    });
+    if (r.ok && r.free_models && r.free_models.length) {
+      $("#pf-models").value = r.free_models.join(", ");
+      renderModelTags(r.free_models, r.free_models);
+      // 自动填入上下文长度
+      if (r.max_context && !$("#pf-context").value) {
+        $("#pf-context").value = r.max_context;
+      }
+      alert(`✨ 已获取 ${r.free_models.length} 个免费模型`);
+    } else if (r.ok && r.models.length) {
+      // 没有明确的免费模型列表，用关键词过滤
+      const freeKeywords = ["free", "flash", "mini", "lite", "tiny", "small"];
+      const freeModels = r.models.filter(m => freeKeywords.some(k => m.toLowerCase().includes(k)));
+      if (freeModels.length) {
+        $("#pf-models").value = freeModels.join(", ");
+        renderModelTags(freeModels, freeModels);
+        alert(`✨ 已获取 ${freeModels.length} 个免费模型（关键词匹配）`);
+      } else {
+        alert("未找到免费模型，请手动选择");
+      }
+    } else {
+      alert(r.msg || "未获取到模型列表");
+    }
+  } catch (e) {
+    alert("获取失败: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ 获取免费";
+  }
 }
 
 function openSettings() {
@@ -2300,6 +2388,43 @@ function switchWfView(view) {
   if (view === "executions") loadWorkflowExecutions();
 }
 
+// 加载工作流执行记录（渲染到列表容器）
+async function loadWorkflowExecutions() {
+  const container = $("#wf-list-content");
+  const cardHtml = allWorkflows.reduce((m, wf) => { m[wf.id] = wf.name; return m; }, {});
+  try {
+    const execs = await api("/api/workflow/executions?limit=50");
+    if (!container) return;
+    if (!execs.length) {
+      container.innerHTML = `<div style="text-align:center; padding:40px 20px;">
+        <div style="font-size:48px; margin-bottom:16px;">📭</div>
+        <h3 style="margin:0 auto 8px; color:var(--chat-text);">暂无执行记录</h3>
+        <p style="color:var(--text-muted); margin:0;">运行过工作流后，这里会展示执行结果与耗时</p>
+      </div>`;
+      return;
+    }
+    let html = '<div class="wf-card-grid">';
+    for (const ex of execs) {
+      const wfName = cardHtml[ex.workflow_id] || esc(ex.workflow_id);
+      const status = ex.status === "completed" ? "✅ 成功" : (ex.status === "running" ? "⏳ 运行中" : "❌ 失败");
+      const stClass = ex.status === "completed" ? "wf-status-ok" : (ex.status === "running" ? "wf-status-none" : "wf-status-fail");
+      const t = ex.started_at ? new Date(ex.started_at * 1000).toLocaleString() : "";
+      const dur = ex.duration_ms ? (ex.duration_ms / 1000).toFixed(1) + "s" : "-";
+      const out = ex.output ? String(ex.output).slice(0, 60) : (ex.error || "");
+      html += `<div class="wf-card">
+        <div class="wf-card-header"><div class="wf-card-icon">🕘</div><div class="wf-card-name" style="font-weight:600; font-size:13px;">${esc(wfName)}</div></div>
+        <div class="wf-card-desc" style="white-space:pre-wrap; color:var(--text-muted);">${esc(out) || "（无输出）"}</div>
+        <div class="wf-card-meta"><span class="${stClass}">${status}</span><span>耗时 ${dur}</span></div>
+        <div class="wf-card-footer"><span class="wf-card-time">${t}</span></div>
+      </div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (e) {
+    if (container) container.innerHTML = `<p style="font-size:12px;color:#dc2626;padding:16px;">加载失败: ${esc(e.message || e)}</p>`;
+  }
+}
+
 // 渲染工作流画布
 function renderWorkflowCanvas() {
   const canvas = $("#wf-canvas");
@@ -2748,10 +2873,12 @@ function showNodeConfig(nodeId) {
         </select></div>
         <div class="ncf-row" id="ncf-llm-cloud-row" style="${cfg.model_source==='local'?'display:none':''}"><label class="ncf-label">云端模型</label>
         <div style="display:flex; gap:6px;">
-          <input class="ncf-input" id="ncf-llm-model-input" value="${esc(cfg.model || '')}" onchange="updateNodeConfig('model', this.value)" placeholder="留空使用默认模型" style="flex:1;">
+          <select class="ncf-select" id="ncf-llm-model-select" onchange="updateNodeConfig('model', this.value)" style="flex:1;">
+            <option value="">加载中...</option>
+          </select>
           <button class="btn-test" onclick="refreshCloudModels()" style="white-space:nowrap; font-size:12px;">🔄 刷新</button>
         </div>
-        <div id="ncf-llm-model-list" style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;"></div></div>
+        <div id="ncf-llm-model-info" style="margin-top:4px; font-size:11px; color:var(--text-muted);"></div></div>
         <div class="ncf-row" id="ncf-llm-local-row" style="${cfg.model_source!=='local'?'display:none':''}"><label class="ncf-label">本地模型（Ollama）</label>
         <div style="display:flex; gap:6px;">
           <select class="ncf-select" id="ncf-ollama-select" onchange="updateNodeConfig('model', this.value)" style="flex:1;">
@@ -2924,27 +3051,47 @@ async function loadOllamaModels() {
 }
 
 async function refreshCloudModels() {
-  const list = $("#ncf-llm-model-list");
-  const input = $("#ncf-llm-model-input");
-  if (!list || !input) return;
-  list.innerHTML = '<span style="font-size:11px; color:var(--text-muted);">加载中...</span>';
+  const sel = $("#ncf-llm-model-select");
+  const info = $("#ncf-llm-model-info");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">加载中...</option>';
   try {
     const providers = await api("/api/providers");
     const models = [];
     providers.forEach(p => {
+      if (p.enabled === false) return;
       (p.models || []).forEach(m => {
-        models.push({ model: m, provider: p.name || p.id, isFree: (p.type || '').includes('free') || (p.pricing || {}).input === 0 });
+        const name = (m || '').toLowerCase();
+        const isFree = name.endsWith('-free') || name === 'big-pickle'
+          || ['flash', 'mini', 'lite', 'tiny', 'small', 'nano'].some(k => name.includes('-'+k))
+          || p.default_model === m && (p.type || '').includes('free');
+        models.push({ model: m, provider: p.name || p.id, isFree });
       });
     });
     if (models.length) {
-      list.innerHTML = models.slice(0, 30).map(m =>
-        `<span class="ncf-var-chip" onclick="document.getElementById('ncf-llm-model-input').value='${esc(m.model)}';updateNodeConfig('model','${esc(m.model)}')">${m.isFree?'🆓':'💰'} ${esc(m.model)}</span>`
+      const node = currentWorkflow?.nodes.find(n => n.id === selectedNode);
+      const currentModel = node?.config?.model || '';
+      // 默认按该供应商配置的默认模型
+      let defaultModel = '';
+      const enabledP = providers.find(p => (p.default_model || '') && p.enabled !== false);
+      if (enabledP) defaultModel = enabledP.default_model;
+      const opts = models.map(m =>
+        `<option value="${esc(m.model)}" ${m.model===currentModel||(!currentModel&&m.model===defaultModel)?'selected':''}>${m.isFree?'🆓':'💰'} ${esc(m.model)} · ${esc(m.provider)}</option>`
       ).join('');
+      sel.innerHTML = opts;
+      const freeCount = models.filter(m=>m.isFree).length;
+      const curFree = models.some(m=>m.model===(currentModel||defaultModel) && m.isFree);
+      if (info) info.innerHTML = `<span style="font-size:11px; color:var(--text-muted);">共 ${models.length} 个模型 · ${freeCount} 个免费 🆓</span>` +
+        (curFree ? ` <span style="color:var(--accent,#22c55e); font-weight:600;">✅ 当前为免费模型，无需 API Key</span>` : ` <span style="color:#eab308;">⚠ 默认模型需 Key</span>`);
+      // 自动应用默认模型到节点配置（未指定时）
+      if (!currentModel && defaultModel) updateNodeConfig('model', defaultModel);
     } else {
-      list.innerHTML = '<span style="font-size:11px; color:var(--text-muted);">未配置供应商，请先在设置中添加</span>';
+      sel.innerHTML = '<option value="">未配置供应商，请先在设置中添加</option>';
+      if (info) info.textContent = '⚠ 请先在「设置 › 模型供应商」中添加并启用供应商';
     }
   } catch (e) {
-    list.innerHTML = '<span style="font-size:11px; color:#ef4444;">加载失败</span>';
+    sel.innerHTML = '<option value="">加载失败</option>';
+    if (info) info.textContent = '❌ ' + e.message;
   }
 }
 
@@ -3217,7 +3364,7 @@ function getDefaultNodeConfig(type) {
   switch (type) {
     case "start": return { input_fields: ["input"] };
     case "end": return { output_field: "output", result_template: "" };
-    case "llm": return { prompt: "", model: "", model_source: "cloud", system: "", temperature: 0.7, memory_mode: "none", output_variable: "", retry: false };
+    case "llm": return { prompt: "", model: "", model_source: "local", system: "", temperature: 0.7, memory_mode: "none", output_variable: "", retry: false };
     case "kb_search": return { query: "{{input}}", top_k: 5, kb_id: "", score_threshold: 0.6 };
     case "kb_index": return { kb_id: "", documents: [], mode: "append" };
     case "classifier": return { input: "{{input}}", categories: [], prompt: "", model: "" };
@@ -3965,13 +4112,19 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text && !pendingAttachments.length) return;
   if (state.streaming) {
-    showSendChoice(text, pendingAttachments.length ? [...pendingAttachments] : null);
+    // 直接排队，无弹窗限制
+    sendQueue.push({ id: ++queueSeq, text, attachFiles: pendingAttachments.length ? [...pendingAttachments] : null });
+    if (pendingAttachments.length) { pendingAttachments = []; renderAttachPreview(); }
+    renderQueue();
+    $("#chat-input").value = "";
+    autoResize();
     return;
   }
   await doSend(text);
 }
 
 async function doSend(text, attachFiles = null) {
+  const userMsg = text; // 保存用户消息用于生成建议
   const input = $("#chat-input");
   if (!state.currentConvId) {
     const data = await api("/api/conversations", {
@@ -4123,13 +4276,27 @@ async function doSend(text, attachFiles = null) {
     $("#send-btn").style.display = "block";
     $("#stop-btn").style.display = "none";
     loadConvs();
-    // 生成提示词建议
+    // 生成提示词建议（不阻塞队列处理）
     if (state.suggestionEnabled && acc && !acc.includes("⚠")) {
-      const suggestions = generateSuggestions(userMsg, acc);
-      renderSuggestions(suggestions, "chat-area");
+      try {
+        const suggestions = generateSuggestions(userMsg, acc);
+        renderSuggestions(suggestions, "chat-area");
+      } catch (e) {
+        console.warn("生成提示词建议失败:", e);
+      }
     }
-    if (state.currentConvId) loadMessages(state.currentConvId);
-    scrollBottom();
+    if (state.currentConvId) {
+      try {
+        loadMessages(state.currentConvId);
+      } catch (e) {
+        console.warn("刷新消息列表失败:", e);
+      }
+    }
+    try {
+      scrollBottom();
+    } catch (e) {
+      console.warn("滚动到底部失败:", e);
+    }
     // 发送队列中的下一条
     processQueue();
   }
@@ -4141,6 +4308,7 @@ function showSendChoice(text, attachFiles) {
   if (!box) return;
   $("#sc-queue-btn").onclick = () => {
     box.style.display = "none";
+    // 即使没有当前对话，也允许排队（发送时自动创建对话）
     sendQueue.push({ id: ++queueSeq, text, attachFiles });
     if (attachFiles) { pendingAttachments = []; renderAttachPreview(); }
     renderQueue();
@@ -4189,6 +4357,12 @@ function renderQueue() {
         e.preventDefault();
         ta.blur();
       }
+    });
+    // 双击编辑按钮聚焦
+    div.addEventListener("dblclick", (e) => {
+      if (e.target.classList.contains("queue-del")) return;
+      ta.focus();
+      ta.select();
     });
     div.querySelector(".queue-del").onclick = () => {
       sendQueue.splice(idx, 1);
@@ -4285,12 +4459,25 @@ function bindEvents() {
   // 语音输入改用按住说话（pointerdown/pointerup），见 initSpeech()
   $("#file-input").onchange = (e) => { handleFiles(e.target.files); e.target.value = ""; };
   $("#mcp-transport").onchange = mcpFormVisible;
-  $("#agent-switch").onchange = (e) => { state.agentEnabled = e.target.checked; };
+  // Agent 开关已移至设置面板（agent-switch-pref）
 
   const input = $("#chat-input");
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      if (state.streaming && e.ctrlKey) {
+        // Ctrl+Enter：抢断发送
+        const text = input.value.trim();
+        if (!text && !pendingAttachments.length) return;
+        // 插入队首并终止当前回复
+        sendQueue.unshift({ id: ++queueSeq, text, attachFiles: pendingAttachments.length ? [...pendingAttachments] : null });
+        if (pendingAttachments.length) { pendingAttachments = []; renderAttachPreview(); }
+        renderQueue();
+        input.value = "";
+        autoResize();
+        if (state.abortController) state.abortController.abort();
+        return;
+      }
       sendMessage();
     }
   });
@@ -4300,9 +4487,11 @@ function bindEvents() {
     state.currentProviderId = e.target.value;
     const p = getProvider(state.currentProviderId);
     state.currentModel = (p && p.models.length) ? p.models[0] : (p ? p.default_model : "");
+    localStorage.setItem("abcode-provider", state.currentProviderId);
+    localStorage.setItem("abcode-model", state.currentModel);
     updateModelSelect();
   };
-  $("#model-select").onchange = (e) => { state.currentModel = e.target.value; };
+  $("#model-select").onchange = (e) => { state.currentModel = e.target.value; localStorage.setItem("abcode-model", e.target.value); };
 
   // 模型类型切换（全部/本地/网络）
   $$(".model-type-btn").forEach((btn) => {
@@ -4416,16 +4605,7 @@ function bindEvents() {
   const compressBtn = $("#compress-btn");
   if (compressBtn) compressBtn.onclick = compressConversation;
 
-  // 输入区模型快捷选择
-  const inputModelSel = $("#input-model-select");
-  if (inputModelSel) {
-    inputModelSel.addEventListener("change", () => {
-      state.currentModel = inputModelSel.value;
-      const topSel = $("#model-select");
-      if (topSel) topSel.value = state.currentModel;
-    });
-  }
-  syncInputModelSelect();
+  // 模型切换集中在右上角（provider-select / model-select），输入区不再放置
 
   // 主题切换（顶栏下拉）
   const themeSelect = $("#theme-select");

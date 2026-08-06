@@ -304,6 +304,13 @@ def init_db():
             conn.execute(f"SELECT {col} FROM experts LIMIT 1")
         except sqlite3.OperationalError:
             conn.execute(f"ALTER TABLE experts ADD COLUMN {col} {col_type}")
+    # 迁移：旧库 conv_tools 表可能缺少 expert_id 列（会导致保存会话工具配置报错）
+    try:
+        ct_cols = [r[1] for r in conn.execute("PRAGMA table_info(conv_tools)").fetchall()]
+        if "expert_id" not in ct_cols:
+            conn.execute("ALTER TABLE conv_tools ADD COLUMN expert_id TEXT DEFAULT ''")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
     # 初始化内置专家套件

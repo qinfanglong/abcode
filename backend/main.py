@@ -174,6 +174,24 @@ def api_fetch_models(body: dict):
     api_key = body.get("api_key", "")
     if not base_url:
         return {"ok": False, "msg": "缺少 Base URL", "models": []}
+
+    # OpenCode Zen 特殊处理：使用硬编码列表，准确区分免费/付费
+    if "opencode.ai" in base_url.lower():
+        models = [
+            "mimo-v2.5-free", "deepseek-v4-flash-free", "big-pickle",
+            "laguna-s-2.1-free", "ling-3.0-flash-free", "longcat-2.0-free",
+            "north-mini-code-free", "nemotron-3-ultra-free",
+            "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
+            "claude-sonnet-4.5", "claude-opus-4.5", "claude-haiku-4.5",
+            "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5-nano",
+            "deepseek-v4-flash", "deepseek-v4-pro",
+            "minimax-m3", "minimax-m2.7",
+            "glm-5.2", "glm-5.1", "glm-5",
+            "kimi-k2.7-code", "kimi-k2.6", "kimi-k3",
+        ]
+        free_models = [m for m in models if m.endswith("-free") or m == "big-pickle"]
+        return {"ok": True, "models": models, "free_models": free_models, "max_context": 200000}
+
     try:
         # 尝试标准 OpenAI 格式
         url = base_url + "/models"

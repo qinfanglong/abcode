@@ -158,6 +158,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   display: flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 18px; color: white;
 }
+/* 左侧问号 Logo：点击切换思考模式 */
+.thinking-logo {
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  background: linear-gradient(135deg, #7c3aed, #3b82f6, #06b6d4);
+  transition: all 0.25s;
+}
+.thinking-logo:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.45);
+}
+.thinking-logo.active {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.8);
+}
 .brand-text h1 { font-size: 17px; color: white; font-weight: 700; }
 .brand-text span { font-size: 11px; color: #8b8d98; }
 
