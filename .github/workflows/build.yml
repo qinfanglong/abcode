@@ -64,7 +64,20 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           
-          # Build executable with PyInstaller
+          # Show Python and PyInstaller versions
+          Write-Host "Python version: $(python --version)"
+          Write-Host "PyInstaller version: $(pyinstaller --version)"
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Files in repo: $(Get-ChildItem | ForEach-Object { $_.Name })"
+          
+          # Check backend/main.py exists
+          if (-not (Test-Path "backend/main.py")) {
+            Write-Error "backend/main.py not found!"
+            exit 1
+          }
+          Write-Host "backend/main.py found"
+          
+          # Build executable with PyInstaller (verbose)
           Write-Host "Building with PyInstaller..."
           python -m PyInstaller `
             --onefile `
@@ -76,14 +89,17 @@ jobs:
             --hidden-import=uvicorn `
             --hidden-import=fastapi `
             --hidden-import=sqlite3 `
+            --log-level=DEBUG `
             backend/main.py
           
           # Verify exe was created
           if (-not (Test-Path "dist/ABcode.exe")) {
             Write-Error "PyInstaller failed - dist/ABcode.exe not found"
+            Write-Host "Contents of dist:"
+            Get-ChildItem dist/ -Force | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
             exit 1
           }
-          Write-Host "PyInstaller success: dist/ABcode.exe created"
+          Write-Host "PyInstaller success: dist/ABcode.exe created ($((Get-Item dist/ABcode.exe).Length) bytes)"
           
           # Create portable package (zip)
           $version = $env:VERSION.TrimStart('v')
