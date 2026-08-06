@@ -170,12 +170,22 @@ def _parse_docx(content: bytes):
         return None
 
 
-def _chunk_text(text, size=600, overlap=80):
-    """将文本切成带重叠的分块；优先按段落/行边界切，避免把句子切断"""
+def _chunk_text(text, size=600, overlap=80, ext=""):
+    """将文本切成带重叠的分块；优先按段落/行边界切，避免把句子切断。
+    ext 为 md/markdown 时启用标题感知分块：按 #/##/### 标题切分，标题跟随其内容，
+    超长章节内部再按段落切，保证每个分块保留所属标题上下文。
+    """
     text = re.sub(r"\r\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     if len(text) <= size:
         return [t for t in [text.strip()] if t]
+
+    # Markdown 标题感知分块
+    if ext in ("md", "markdown"):
+        chunks = _chunk_markdown(text, size, overlap)
+        if chunks:
+            return chunks
+
     # 段落切分
     paras = re.split(r"\n\s*\n", text)
     chunks = []
@@ -198,6 +208,61 @@ def _chunk_text(text, size=600, overlap=80):
                 buf = p
     if buf:
         chunks.append(buf)
+    return [c for c in chunks if c.strip()]
+
+
+def _chunk_markdown(text, size, overlap):
+    """按 Markdown 标题切分。返回分块列表；若无标题结构返回 []（回退普通切分）"""
+    lines = text.split("\n")
+    # 识别标题行（# 开头，且不是 ### 代码块内——粗略处理）
+    sections = []  # [(title, [content_lines])]
+    cur_title = None
+    cur_lines = []
+    has_title = False
+    in_code = False
+    for ln in lines:
+        stripped = ln.strip()
+        if stripped.startswith("```"):
+            in_code = not in_code
+        if not in_code and re.match(r"^#{1,6}\s+\S", stripped):
+            has_title = True
+            if cur_title is not None or cur_lines:
+                sections.append((cur_title, cur_lines))
+            cur_title = ln.strip()
+            cur_lines = []
+            continue
+        cur_lines.append(ln)
+    if cur_title is not None or cur_lines:
+        sections.append((cur_title, cur_lines))
+    if not has_title:
+        return []
+    # 组装：标题+内容，超长 section 内部再切
+    chunks = []
+    for title, body_lines in sections:
+        section_text = "\n".join(body_lines).strip()
+        prefix = title + "\n\n" if title else ""
+        if not section_text and not prefix:
+            continue
+        if len(prefix) + len(section_text) <= size:
+            chunks.append((prefix + section_text).strip())
+        else:
+            # 超长章节：段落级切分，每块保留标题前缀
+            paras = [p.strip() for p in re.split(r"\n\s*\n", section_text) if p.strip()]
+            buf = prefix
+            for p in paras:
+                if len(buf) + len(p) + 2 <= size:
+                    buf = f"{buf}\n\n{p}" if buf.strip() else p
+                else:
+                    if buf.strip():
+                        chunks.append(buf.strip())
+                    if len(p) > size:
+                        for sub in _split_long(p, size, overlap):
+                            chunks.append((prefix + sub).strip())
+                        buf = prefix
+                    else:
+                        buf = prefix + p
+            if buf.strip():
+                chunks.append(buf.strip())
     return [c for c in chunks if c.strip()]
 
 
@@ -229,7 +294,7 @@ def add_document(filename: str, content: bytes):
         return None, 0
     if len(text.strip()) < 20:
         return None, 0
-    chunks = _chunk_text(text)
+    chunks = _chunk_text(text, ext=ext)
     if not chunks:
         return None, 0
     doc_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:12]
