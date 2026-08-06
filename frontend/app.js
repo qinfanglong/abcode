@@ -129,7 +129,7 @@ function saveSuggestionSettings() {
   localStorage.setItem("abcode-suggestion", state.suggestionEnabled);
 }
 
-// ===== 粒子动画设置 =====
+// ===== 动效动画设置（粒子 / 海浪共用开关） =====
 function applyParticleAnimationSettings() {
   const toggle = document.getElementById("particle-animate-toggle");
   if (toggle) toggle.checked = state.particleAnimate;
@@ -137,9 +137,10 @@ function applyParticleAnimationSettings() {
 
 function saveParticleAnimationSettings() {
   localStorage.setItem("abcode-particle-anim", state.particleAnimate);
-  // 当前是粒子主题则立即按新状态刷新（开=动起来，关=定格一帧静态）
+  // 当前是动效主题则立即按新状态刷新（开=动起来，关=定格静态）
   if (state.theme === "particles") startParticles({ light: false });
   else if (state.theme === "particles-light") startParticles({ light: true });
+  else if (state.theme === "wave") startWaves();
 }
 
 // ===== 生成提示词建议 =====
@@ -614,18 +615,79 @@ function applyTheme(theme) {
   $$(".theme-pick-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.theme === theme);
   });
-  // 粒子主题：启用柔和粒子背景（深色星空 / 淡雅白昼）
-  if (theme === "particles") {
-    startParticles({ light: false });
-  } else if (theme === "particles-light") {
-    startParticles({ light: true });
+  // 粒子/海浪/动效主题：启用相应柔和背景动画（深色星空 / 淡雅白昼 / 海浪波纹）
+  if (theme === "particles" || theme === "particles-light") {
+    startParticles({ light: theme === "particles-light" });
+  } else if (theme === "wave") {
+    startWaves();
   } else {
     stopParticles();
+    stopWaves();
   }
 }
 
-// ===== 粒子背景（仅粒子主题启用，柔和、不晃眼） =====
-let _pRaf = null;
+// ===== 海浪背景（仅海浪主题启用，缓慢呼吸、不晃眼） =====
+let _wRaf = null;
+let _wCtx = null;
+let _wT = 0;
+
+function startWaves() {
+  stopWaves(); // 幂等：先清旧
+  let canvas = $("#wave-bg");
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    canvas.id = "wave-bg";
+    document.body.appendChild(canvas);
+  }
+  canvas.style.display = "block";
+  const ctx = canvas.getContext("2d");
+  _wCtx = ctx;
+
+  const resize = () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  };
+  resize();
+  window.addEventListener("resize", resize);
+
+  // 三层波浪：低透明度浅蓝，缓慢左右漂移（上浮节奏）
+  const layers = [
+    { amp: 26, speed: 0.012, phase: 0, alpha: 0.16, base: canvas.height * 0.82, color: "90,180,215" },
+    { amp: 20, speed: 0.018, phase: 1.7, alpha: 0.14, base: canvas.height * 0.88, color: "120,200,225" },
+    { amp: 34, speed: 0.010, phase: 3.2, alpha: 0.18, base: canvas.height * 0.93, color: "70,150,195" },
+  ];
+
+  const draw = (t) => {
+    const s = t / 1000;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const L of layers) {
+      ctx.beginPath();
+      ctx.moveTo(0, L.base);
+      for (let x = 0; x <= canvas.width; x += 8) {
+        const y = L.base + Math.sin(x * 0.010 + s * L.speed + L.phase) * L.amp;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(canvas.width, canvas.height);
+      ctx.lineTo(0, canvas.height);
+      ctx.closePath();
+      ctx.fillStyle = L.color;
+      ctx.globalAlpha = L.alpha;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (state.particleAnimate) _wRaf = requestAnimationFrame(draw);
+    else { _wRaf = null; } // 动画关：停顿在当前画面
+  };
+  _wRaf = requestAnimationFrame(draw);
+}
+
+function stopWaves() {
+  if (_wRaf) { cancelAnimationFrame(_wRaf); _wRaf = null; }
+  const canvas = $("#wave-bg");
+  if (canvas) canvas.style.display = "none";
+  _wCtx = null;
+  _wT = 0;
+}
 let _pCtx = null;
 let _pParticles = [];
 
@@ -2593,19 +2655,93 @@ async function loadWorkflowExecutions() {
       const stClass = ex.status === "completed" ? "wf-status-ok" : (ex.status === "running" ? "wf-status-none" : "wf-status-fail");
       const t = ex.started_at ? new Date(ex.started_at * 1000).toLocaleString() : "";
       const dur = ex.duration_ms ? (ex.duration_ms / 1000).toFixed(1) + "s" : "-";
+      const tokens = ex.tokens_used ? String(ex.tokens_used) : "";
       const out = ex.output ? String(ex.output).slice(0, 60) : (ex.error || "");
       html += `<div class="wf-card">
         <div class="wf-card-header"><div class="wf-card-icon">🕘</div><div class="wf-card-name" style="font-weight:600; font-size:13px;">${esc(wfName)}</div></div>
         <div class="wf-card-desc" style="white-space:pre-wrap; color:var(--text-muted);">${esc(out) || "（无输出）"}</div>
-        <div class="wf-card-meta"><span class="${stClass}">${status}</span><span>耗时 ${dur}</span></div>
-        <div class="wf-card-footer"><span class="wf-card-time">${t}</span></div>
-      </div>`;
+        <div class="wf-card-meta"><span class="${stClass}">${status}</span><span>耗时 ${dur}${tokens ? " · ⚡" + tokens + " tokens" : ""}</span></div>
+        <div class="wf-card-footer" style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+          <span class="wf-card-time">${t}</span>
+          <span style="display:flex; gap:6px;">
+            <button class="wf-card-btn" onclick="showWfExecDetail('${ex.id}', this)">📄 详情</button>
+            ${ex.status !== "running" ? `<button class="wf-card-btn" onclick="rerunWorkflowExec('${ex.workflow_id}')">▶ 重跑</button>` : ""}
+          </span>
+        </div>
+      </div>
+      <div class="wf-exec-detail" id="wfexec-${ex.id}" style="display:none;"></div>`;
     }
     html += '</div>';
     container.innerHTML = html;
   } catch (e) {
     if (container) container.innerHTML = `<p style="font-size:12px;color:#dc2626;padding:16px;">加载失败: ${esc(e.message || e)}</p>`;
   }
+}
+
+// 展开/收起某条执行记录的详情
+async function showWfExecDetail(eid, btn) {
+  const panel = document.getElementById("wfexec-" + eid);
+  if (!panel) return;
+  if (panel.style.display === "block") {
+    panel.style.display = "none";
+    if (btn) btn.textContent = "📄 详情";
+    return;
+  }
+  panel.style.display = "block";
+  if (btn) btn.textContent = "📄 收起";
+  if (panel.getAttribute("data-loaded")) return;
+  try {
+    const ex = await api("/api/workflow/executions/" + eid);
+    panel.setAttribute("data-loaded", "1");
+    const parts = [];
+    const box = (label, body) =>
+      `<div style="margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${label}</div>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;white-space:pre-wrap;word-break:break-word;">${body}</div>
+      </div>`;
+    if (ex.input !== undefined && ex.input !== null) {
+      parts.push(box("输入 input", esc(typeof ex.input === "string" ? ex.input : JSON.stringify(ex.input, null, 2))));
+    }
+    // 节点观测（各节点请求/响应/耗时）
+    if (ex.nodes_status && Object.keys(ex.nodes_status).length) {
+      let nh = "";
+      for (const [nid, ns] of Object.entries(ex.nodes_status)) {
+        const st = ns.status === "ok" ? "✅" : (ns.status === "running" ? "⏳" : "❌");
+        const d = ns.duration_ms != null ? (ns.duration_ms / 1000).toFixed(1) + "s" : "-";
+        const nm = ns.error ? `<div style="color:#ef4444;margin-top:2px;">${esc(String(ns.error))}</div>` : "";
+        nh += `<div style="margin-bottom:6px;">${st} <b>${esc(nid)}</b> · <span class="wf-status-muted">${d}</span>${nm}</div>`;
+      }
+      parts.push(`节点执行<div style="font-weight:normal">${nh}</div>`);
+    }
+    if (ex.node_requests && typeof ex.node_requests === "object" && Object.keys(ex.node_requests).length) {
+      let rq = "";
+      for (const [nid, req] of Object.entries(ex.node_requests)) {
+        const resp = (req && req.response !== undefined) ? (typeof req.response === "string" ? req.response : JSON.stringify(req.response, null, 2)) : "";
+        const rd = (req && req.duration_ms != null) ? (req.duration_ms / 1000).toFixed(1) + "s" : "";
+        rq += `<div style="margin-bottom:8px;">
+          <div style="font-size:11px;color:var(--text-muted);">${esc(nid)}${rd ? " · " + rd : ""}</div>
+          <div style="background:var(--code-bg);color:var(--code-text);border-radius:5px;padding:6px 8px;font-size:11px;white-space:pre-wrap;word-break:break-word;">${esc(String(resp).slice(0, 800))}</div>
+        </div>`;
+      }
+      parts.push(`节点请求/响应<div style="font-weight:400">${rq}</div>`);
+    }
+    // 输出
+    if (ex.output !== undefined && ex.output !== null) {
+      parts.push("输出", esc(typeof ex.output === "string" ? ex.output : JSON.stringify(ex.output, null, 2)));
+    }
+    // 失败原因
+    if (ex.status !== "completed" && ex.error) {
+      parts.push(`失败原因<div style="font-weight:400"><span style="color:#ef4444;">${esc(String(ex.error))}</span></div>`);
+    }
+    panel.innerHTML = parts.join("") || '<p style="color:var(--text-muted);font-size:12px;">（无更多详情）</p>';
+  } catch (e) {
+    panel.innerHTML = `<p style="color:#dc2626;font-size:12px;">加载详情失败: ${esc(e.message || e)}</p>`;
+  }
+}
+
+// 重跑某条执行记录对应的工作流
+function rerunWorkflowExec(wfId) {
+  runWorkflow(wfId);
 }
 
 // 渲染工作流画布

@@ -35,3 +35,13 @@ _wftest*.py
 test_venv/
 build/
 .pytest_cache/
+
+# Nuitka 构建产物
+build_nuitka/
+*.dist/
+*.build/
+*.onefile-build/
+*.bin
+
+# 最终可执行文件（Release 时再上传到 GitHub Releases）
+dist/
