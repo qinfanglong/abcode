@@ -501,8 +501,58 @@ def _bm25_index(kb_id: str = None):
     return df, doc_terms, doc_lens, rows
 
 
-def search(query, top_k=5, kb_id: str = None):
-    """BM25 关键词检索（可限定知识库），返回最相关片段列表（含命中词高亮信息）"""
+def _compute_signals(content, q_terms, q_pairs, bm25_score, dl, avg_len, chunk_idx):
+    """计算切片的打分信号，返回 (signals, hits, positions)。
+    - phrase: 相邻查询词对在切片中连续出现的比例（0~1）
+    - coverage: 命中查询词数 / 查询词数（0~1）
+    - position: 命中词靠前程度（命中位置越靠切片开头分越高，0~1）
+    - density: 命中密度 = 命中次数 / 切片长度
+    - head: 切片是否位于文档靠前部分（idx 越小分越高，0~1）
+    """
+    text_l = content.lower()
+    total = len(q_terms)
+    hit_set = set()
+    positions = []
+    hit_count = 0
+    for t in q_terms:
+        idx = text_l.find(t)
+        if idx >= 0:
+            hit_set.add(t)
+            positions.append(idx)
+            hit_count += text_l.count(t)
+    coverage = len(hit_set) / total if total else 0.0
+    # 短语连续命中：统计同时包含词对两个词的词对比例
+    if q_pairs and len(content) > 1:
+        hit_pairs = sum(1 for a, b in q_pairs if a in hit_set and b in hit_set)
+        phrase = hit_pairs / len(q_pairs)
+    else:
+        phrase = coverage
+    # 位置加权：第一个命中越靠前分越高（前 200 字符线性衰减）
+    if positions:
+        first = min(positions)
+        position = max(0.0, 1.0 - first / 200.0)
+    else:
+        position = 0.0
+    # 密度：命中次数相对切片长度（防止超长切片靠词频刷分）
+    density = min(1.0, hit_count / max(dl, 1) * 6.0)
+    # 文档头部加权：idx 越小越靠前
+    head = max(0.0, 1.0 - chunk_idx * 0.02)
+    return {
+        "bm25": bm25_score,
+        "phrase": round(phrase, 4),
+        "coverage": round(coverage, 4),
+        "position": round(position, 4),
+        "density": round(density, 4),
+        "head": round(head, 4),
+    }, sorted(hit_set), positions
+
+
+def search(query, top_k=5, kb_id: str = None, min_score: float = 0.0, diversify: bool = True):
+    """混合打分检索（可限定知识库），返回最相关片段列表。
+    - min_score: 阈值（0~1），低于该总分的片段被过滤
+    - diversify: 启用 MMR 多样性，避免 top-k 结果集中在同一文档
+    每项包含 breakdown 打分明细：bm25/phrase/coverage/position/density/head
+    """
     q_terms = _tokenize(query, for_query=True)
     # 短查询（无 bigram 命中可能）时回退到含单字的完整分词
     if len(q_terms) <= 1 and len(re.findall(r"[\u4e00-\u9fff]", query)) >= 1:
@@ -510,14 +560,19 @@ def search(query, top_k=5, kb_id: str = None):
     q_terms = list(dict.fromkeys(q_terms))  # 去重保序
     if not q_terms:
         return []
+    # 相邻词对（用于短语命中检测）
+    q_pairs = [(q_terms[i], q_terms[i + 1]) for i in range(len(q_terms) - 1)]
     df, doc_terms, doc_lens, rows = _bm25_index(kb_id)
     N = max(len(doc_terms), 1)
     avg_len = (sum(doc_lens.values()) / N) if N else 0
+    # 预缓存每块元数据（避免循环内反复查 rows）
+    meta_by_id = {}
+    for r in rows:
+        meta_by_id[r["id"]] = r
 
     scored = []
     for ch_id, cnt in doc_terms.items():
         score = 0.0
-        hits = []
         dl = doc_lens[ch_id]
         for t in q_terms:
             f = cnt.get(t, 0)
@@ -527,11 +582,69 @@ def search(query, top_k=5, kb_id: str = None):
             idf = math.log(1 + (N - n + 0.5) / (n + 0.5))
             tf = (f * (_K1 + 1)) / (f + _K1 * (1 - _B + _B * (dl / avg_len if avg_len else 1)))
             score += idf * tf
-            hits.append(t)
         if score > 0:
-            scored.append((score, ch_id, hits))
+            meta = meta_by_id.get(ch_id)
+            content = meta["content"].strip() if meta else ""
+            signals, hits, positions = _compute_signals(
+                content, q_terms, q_pairs, score, dl, avg_len, meta["idx"] if meta else 0)
+            scored.append({"chunk_id": ch_id, "doc_id": meta["doc_id"] if meta else "",
+                           "signals": signals, "hits": hits})
 
-    scored.sort(key=lambda x: -x[0])
+    if not scored:
+        return []
+    # BM25 min-max 归一化到 0~1（避免绝对值差异影响混合权重）
+    bm25_vals = [s["signals"]["bm25"] for s in scored]
+    b_min, b_max = min(bm25_vals), max(bm25_vals)
+    if b_max == b_min:
+        # 全部相同（通常只有一条命中）：唯一命中即最优
+        for s in scored:
+            s["signals"]["bm25_norm"] = 1.0 if s["signals"]["bm25"] > 0 else 0.0
+    else:
+        b_range = b_max - b_min
+        for s in scored:
+            s["signals"]["bm25_norm"] = round((s["signals"]["bm25"] - b_min) / b_range, 4)
+    # 混合总分：BM25 主导 + 短语精确匹配 + 覆盖率 + 位置 + 头部 + 密度
+    for s in scored:
+        sg = s["signals"]
+        total = (0.40 * sg["bm25_norm"]
+                 + 0.20 * sg["phrase"]
+                 + 0.15 * sg["coverage"]
+                 + 0.10 * sg["position"]
+                 + 0.10 * sg["head"]
+                 + 0.05 * sg["density"])
+        s["signals"]["total"] = round(total, 4)
+        s["total"] = total
+
+    # 阈值过滤
+    if min_score > 0:
+        scored = [s for s in scored if s["total"] >= min_score]
+
+    # 排序：先按总分；若启用多样性，用贪心 MMR 重排
+    if diversify and len(scored) > 1:
+        picked = []
+        remaining = scored[:]
+        # 第一项选总分最高的
+        remaining.sort(key=lambda x: -x["total"])
+        picked.append(remaining.pop(0))
+        while remaining and len(picked) < top_k:
+            best = None
+            best_val = -1
+            for i, cand in enumerate(remaining):
+                # 多样性惩罚：与已选中文档重合度（同文档 + 相似内容）
+                dup_penalty = 0.0
+                for p in picked:
+                    if p["doc_id"] == cand["doc_id"]:
+                        dup_penalty += 0.25
+                val = cand["total"] - dup_penalty
+                if val > best_val:
+                    best_val = val
+                    best = i
+            picked.append(remaining.pop(best))
+        scored = picked
+    else:
+        scored.sort(key=lambda x: -x["total"])
+
+    scored = scored[:top_k]
     # 元数据缓存
     doc_names = {}
     conn2 = get_conn()
@@ -540,8 +653,8 @@ def search(query, top_k=5, kb_id: str = None):
     conn2.close()
 
     results = []
-    for score, ch_id, hits in scored[:top_k]:
-        meta = next((r for r in rows if r["id"] == ch_id), None)
+    for s in scored:
+        meta = meta_by_id.get(s["chunk_id"])
         if not meta:
             continue
         doc = doc_names.get(meta["doc_id"], {"name": "未知", "ext": ""})
@@ -550,12 +663,13 @@ def search(query, top_k=5, kb_id: str = None):
             "doc_id": meta["doc_id"],
             "doc_name": doc["name"],
             "doc_type": TEXT_EXTS.get(doc.get("ext", ""), "文档"),
-            "chunk_id": ch_id,
+            "chunk_id": s["chunk_id"],
             "chunk_idx": meta["idx"],
             "content": content[:1200],
-            "snippet": _snippet(content, hits, 400),
-            "hits": hits[:8],
-            "score": round(score, 2),
+            "snippet": _snippet(content, s["hits"], 400),
+            "hits": s["hits"][:8],
+            "score": round(s["total"], 4),
+            "breakdown": s["signals"],
         })
     return results
 
@@ -591,9 +705,9 @@ def _snippet(content, hits, max_len=400):
     return snippet
 
 
-def search_with_highlight(query, top_k=5, kb_id: str = None):
+def search_with_highlight(query, top_k=5, kb_id: str = None, min_score: float = 0.0, diversify: bool = True):
     """检索 + 生成命中词高亮 HTML 片段（<mark>），前端可直接展示"""
-    results = search(query, top_k, kb_id=kb_id)
+    results = search(query, top_k, kb_id=kb_id, min_score=min_score, diversify=diversify)
     q_terms = _tokenize(query, for_query=True)
     if len(q_terms) <= 1 and len(re.findall(r"[\u4e00-\u9fff]", query)) >= 1:
         q_terms = _tokenize(query, for_query=False)
@@ -629,12 +743,12 @@ def search_with_highlight(query, top_k=5, kb_id: str = None):
     return results
 
 
-def build_context(query, top_k=4, per_doc=2, kb_id: str = None):
+def build_context(query, top_k=4, per_doc=2, kb_id: str = None, min_score: float = 0.0):
     """构建 RAG 上下文文本（聊天注入用），无匹配返回 None。
     top_k 总片段数上限；per_doc 同一文档最多取片段数，避免单个文档垄断上下文。
-    kb_id 非空时只从该知识库检索。
+    kb_id 非空时只从该知识库检索；min_score 为混合打分阈值。
     """
-    results = search(query, top_k * 2, kb_id=kb_id)
+    results = search(query, top_k * 2, kb_id=kb_id, min_score=min_score)
     if not results:
         return None
     # 按文档聚合，每文档最多 per_doc 块

@@ -391,8 +391,9 @@ class WorkflowEngine:
         query = render_template(config.get("query", ""), self.variables) or str(self.variables.get("input", ""))
         top_k = int(config.get("top_k", 5) or 5)
         kb_id = config.get("kb_id") or None
+        threshold = float(config.get("threshold", 0) or 0)
         req_start = time.time()
-        results = rag.search(query, top_k=top_k, kb_id=kb_id)
+        results = rag.search(query, top_k=top_k, kb_id=kb_id, min_score=threshold)
         req_duration = int((time.time() - req_start) * 1000)
         # 输出格式：拼接文本
         lines = []
@@ -400,7 +401,7 @@ class WorkflowEngine:
             lines.append(f"[{i+1}] 《{r['doc_name']}》 相关度{r['score']}\n{r['content']}")
         output = "\n\n".join(lines)
         self.node_requests[node["id"]] = {
-            "request": {"query": query[:2000], "top_k": top_k, "kb_id": kb_id},
+            "request": {"query": query[:2000], "top_k": top_k, "kb_id": kb_id, "threshold": threshold},
             "response": {"results": [{"doc": r.get("doc_name", ""), "score": r.get("score", 0), "content": r.get("content", "")[:500]} for r in results[:10]]},
             "duration_ms": req_duration,
             "type": "kb_search",

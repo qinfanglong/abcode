@@ -1496,11 +1496,21 @@ async function kbTestSearch() {
       box.innerHTML = '<p class="hint">未找到相关内容，试试更具体的关键词</p>';
       return;
     }
-    let html = `<div class="kb-test-head">找到 ${results.length} 条相关片段</div>`;
+    let html = `<div class="kb-test-head">找到 ${results.length} 条相关片段（混合打分排序）</div>`;
     results.forEach((r) => {
       const shown = (r.highlight || r.snippet || r.content).slice(0, 300);
+      const bd = r.breakdown || {};
+      const scoreBar = Math.min(100, Math.round((r.score || 0) * 100));
+      const detail = [
+        `BM25 ${Math.round((bd.bm25_norm ?? 0) * 100)}%`,
+        `短语 ${Math.round((bd.phrase ?? 0) * 100)}%`,
+        `覆盖 ${Math.round((bd.coverage ?? 0) * 100)}%`,
+        `位置 ${Math.round((bd.position ?? 0) * 100)}%`,
+      ].join(" · ");
       html += `<div class="kb-test-item">
-        <div class="kti-doc">📄 ${esc(r.doc_name)} <span class="kb-type-tag">${esc(r.doc_type || "文档")}</span> <span class="kti-score">相关度 ${r.score}</span></div>
+        <div class="kti-doc">📄 ${esc(r.doc_name)} <span class="kb-type-tag">${esc(r.doc_type || "文档")}</span> <span class="kti-score">综合 ${r.score}</span></div>
+        <div class="kti-bar"><div class="kti-bar-fill" style="width:${scoreBar}%"></div></div>
+        <div class="kti-breakdown">${detail}</div>
         <div class="kti-content">${shown}</div>
       </div>`;
     });

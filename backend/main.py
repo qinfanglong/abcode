@@ -874,9 +874,11 @@ def api_kb_search(body: dict):
     top_k = int(body.get("top_k", 5))
     highlight = bool(body.get("highlight", False))
     kb_id = body.get("kb_id") or None
+    min_score = float(body.get("min_score", 0.0) or 0.0)
+    diversify = bool(body.get("diversify", True))
     if highlight:
-        return rag.search_with_highlight(query, top_k, kb_id=kb_id)
-    return rag.search(query, top_k, kb_id=kb_id)
+        return rag.search_with_highlight(query, top_k, kb_id=kb_id, min_score=min_score, diversify=diversify)
+    return rag.search(query, top_k, kb_id=kb_id, min_score=min_score, diversify=diversify)
 
 
 @app.get("/api/kb/docs/{doc_id}")
