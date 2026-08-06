@@ -61,20 +61,67 @@ jobs:
           
           Write-Host "Creating Windows packages..."
           Write-Host "Current directory: $(Get-Location)"
-          Write-Host "Files: $(Get-ChildItem -Name)"
           
           # Create dist directory
           New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
           
-          # Binary package
+          # Check what directories/files exist
+          $dirsToCheck = @("backend", "frontend", "macapp", "scripts", "docs", "build")
+          foreach ($d in $dirsToCheck) {
+            if (Test-Path $d) {
+              Write-Host "Directory exists: $d"
+            } else {
+              Write-Host "Directory NOT found: $d"
+            }
+          }
+          
+          $filesToCheck = @("start.sh", "start.bat", "requirements.txt", "README.md", "CHANGELOG.md", "LICENSE")
+          foreach ($f in $filesToCheck) {
+            if (Test-Path $f) {
+              Write-Host "File exists: $f"
+            } else {
+              Write-Host "File NOT found: $f"
+            }
+          }
+          
+          # Binary package - use explicit file list
           $binaryName = "ABcode-windows-${version}.zip"
           Write-Host "Creating binary package: $binaryName"
-          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "scripts/*" -DestinationPath "dist_windows/$binaryName" -Force
+          
+          # Create a temp directory structure
+          $tempDir = "dist_windows_temp_binary"
+          if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $tempDir | Out-Null
+          
+          if (Test-Path "backend") { Copy-Item -Recurse backend "$tempDir/" }
+          if (Test-Path "frontend") { Copy-Item -Recurse frontend "$tempDir/" }
+          if (Test-Path "macapp") { Copy-Item -Recurse macapp "$tempDir/" }
+          if (Test-Path "scripts") { Copy-Item -Recurse scripts "$tempDir/" }
+          
+          Compress-Archive -Path "$tempDir/*" -DestinationPath "dist_windows/$binaryName" -Force
+          Remove-Item $tempDir -Recurse -Force
           
           # Source package
           $sourceName = "ABcode-windows-source-${version}.zip"
           Write-Host "Creating source package: $sourceName"
-          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "requirements.txt", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist_windows/$sourceName" -Force
+          
+          $tempDir2 = "dist_windows_temp_source"
+          if (Test-Path $tempDir2) { Remove-Item $tempDir2 -Recurse -Force }
+          New-Item -ItemType Directory -Path $tempDir2 | Out-Null
+          
+          if (Test-Path "backend") { Copy-Item -Recurse backend "$tempDir2/" }
+          if (Test-Path "frontend") { Copy-Item -Recurse frontend "$tempDir2/" }
+          if (Test-Path "macapp") { Copy-Item -Recurse macapp "$tempDir2/" }
+          if (Test-Path "start.sh") { Copy-Item start.sh "$tempDir2/" }
+          if (Test-Path "start.bat") { Copy-Item start.bat "$tempDir2/" }
+          if (Test-Path "requirements.txt") { Copy-Item requirements.txt "$tempDir2/" }
+          if (Test-Path "README.md") { Copy-Item README.md "$tempDir2/" }
+          if (Test-Path "docs") { Copy-Item -Recurse docs "$tempDir2/" }
+          if (Test-Path "CHANGELOG.md") { Copy-Item CHANGELOG.md "$tempDir2/" }
+          if (Test-Path "LICENSE") { Copy-Item LICENSE "$tempDir2/" }
+          
+          Compress-Archive -Path "$tempDir2/*" -DestinationPath "dist_windows/$sourceName" -Force
+          Remove-Item $tempDir2 -Recurse -Force
           
           # Verify
           Get-ChildItem dist_windows/ | ForEach-Object { 
