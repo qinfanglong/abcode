@@ -1249,8 +1249,10 @@ async function testSearchService() {
 }
 
 // ===== 知识库 =====
+let currentKbId = "default";
 function openKb() {
   $("#kb-modal").style.display = "flex";
+  loadKbList();
   loadKbDocs();
   setupKbDropzone();
 }
@@ -1290,10 +1292,53 @@ function closeKbDetail() {
   $("#kb-detail-modal").style.display = "none";
 }
 
+async function loadKbList() {
+  try {
+    const kbs = await api("/api/kb/list");
+    const sel = $("#kb-select");
+    if (!sel) return;
+    sel.innerHTML = kbs.map(k => `<option value="${escAttr(k.id)}">${esc(k.name)} (${k.doc_count})</option>`).join("");
+    if (!kbs.some(k => k.id === currentKbId)) currentKbId = "default";
+    sel.value = currentKbId;
+  } catch (e) { /* 面板未打开时忽略 */ }
+}
+
+function switchKb(kbId) {
+  currentKbId = kbId || "default";
+  loadKbDocs();
+}
+
+async function createKbPrompt() {
+  const name = prompt("新建知识库名称:");
+  if (!name || !name.trim()) return;
+  try {
+    const res = await api("/api/kb/create", {
+      method: "POST",
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    currentKbId = res.id;
+    await loadKbList();
+    loadKbDocs();
+  } catch (e) { alert(`创建失败: ${e.message}`); }
+}
+
+async function deleteKbPrompt() {
+  if (currentKbId === "default") { alert("默认知识库不可删除"); return; }
+  const kbs = await api("/api/kb/list").catch(() => []);
+  const kb = kbs.find(k => k.id === currentKbId);
+  if (!confirm(`确定删除知识库「${kb ? kb.name : currentKbId}」？其下所有文档将一并删除！`)) return;
+  try {
+    await api(`/api/kb/${currentKbId}`, { method: "DELETE" });
+    currentKbId = "default";
+    await loadKbList();
+    loadKbDocs();
+  } catch (e) { alert(`删除失败: ${e.message}`); }
+}
+
 async function loadKbDocs() {
   const [docs, stats] = await Promise.all([
-    api("/api/kb/docs"),
-    api("/api/kb/stats").catch(() => null),
+    api(`/api/kb/docs${currentKbId ? `?kb_id=${encodeURIComponent(currentKbId)}` : ""}`),
+    api(`/api/kb/stats${currentKbId ? `?kb_id=${encodeURIComponent(currentKbId)}` : ""}`).catch(() => null),
   ]);
   window._kbAllDocs = docs || [];
   if (stats) {
@@ -1369,6 +1414,7 @@ async function uploadKb() {
   for (const f of files) {
     const fd = new FormData();
     fd.append("file", f);
+    fd.append("kb_id", currentKbId || "default");
     try {
       const resp = await fetch("/api/kb/upload", { method: "POST", body: fd });
       if (resp.ok) {
@@ -1390,17 +1436,23 @@ async function uploadKb() {
   alert(`上传完成：${parts.join("，") || "无变化"}${fails.length ? `\n${fails.join("\n")}` : ""}`);
   input.value = "";
   loadKbDocs();
+  loadKbList();
 }
 
 function exportKb() {
-  window.location.href = "/api/kb/export";
+  const q = currentKbId ? `?kb_id=${encodeURIComponent(currentKbId)}` : "";
+  window.location.href = `/api/kb/export${q}`;
 }
 
 async function clearKb() {
-  if (!confirm("确定清空全部知识库？此操作不可恢复！")) return;
-  if (!confirm("再次确认：将删除所有文档和索引。")) return;
-  await api("/api/kb/clear", { method: "POST" });
+  if (!confirm("确定清空当前知识库？此操作不可恢复！")) return;
+  if (!confirm("再次确认：将删除当前知识库的所有文档和索引。")) return;
+  await api("/api/kb/clear", {
+    method: "POST",
+    body: JSON.stringify({ kb_id: currentKbId || null }),
+  });
   loadKbDocs();
+  loadKbList();
 }
 
 function setupKbDropzone() {
@@ -1438,7 +1490,7 @@ async function kbTestSearch() {
   try {
     const results = await api("/api/kb/search", {
       method: "POST",
-      body: JSON.stringify({ query: q, top_k: 5, highlight: true }),
+      body: JSON.stringify({ query: q, top_k: 5, highlight: true, kb_id: currentKbId || null }),
     });
     if (!results.length) {
       box.innerHTML = '<p class="hint">未找到相关内容，试试更具体的关键词</p>';

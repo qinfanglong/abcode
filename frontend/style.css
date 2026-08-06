@@ -87,7 +87,19 @@
 [data-theme="dark"] .add-form { background: #27272a; }
 [data-theme="dark"] .add-form input, [data-theme="dark"] .add-form select { background: #1a1a1f; border-color: #3f3f46; color: #e4e4e7; }
 [data-theme="dark"] .cron-job { background: #1a1a1f; border-color: #27272a; }
-[data-theme="dark"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="dark"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -141,7 +153,19 @@
 [data-theme="sepia"] .add-form { background: #eee5d3; }
 [data-theme="sepia"] .add-form input, [data-theme="sepia"] .add-form select { background: #f5f0e8; border-color: #d4c9b8; color: #3e3428; }
 [data-theme="sepia"] .cron-job { background: #ede7db; border-color: #d4c9b8; }
-[data-theme="sepia"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="sepia"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -221,7 +245,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="minimal"] .add-form { background: #ffffff; }
 [data-theme="minimal"] .add-form input, [data-theme="minimal"] .add-form select { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
 [data-theme="minimal"] .cron-job { background: #ffffff; border-color: #e2e3e9; }
-[data-theme="minimal"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="minimal"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -296,7 +332,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="ocean"] .add-form { background: #ffffff; }
 [data-theme="ocean"] .add-form input, [data-theme="ocean"] .add-form select { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
 [data-theme="ocean"] .cron-job { background: #ffffff; border-color: #cfe0ec; }
-[data-theme="ocean"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="ocean"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -375,7 +423,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="wave"] .add-form { background: rgba(255, 255, 255, 0.85); }
 [data-theme="wave"] .add-form input, [data-theme="wave"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #c9ddec; color: #2b505d; }
 [data-theme="wave"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #cfe2ee; }
-[data-theme="wave"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="wave"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -450,7 +510,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="oled"] .add-form { background: #0a0b0e; }
 [data-theme="oled"] .add-form input, [data-theme="oled"] .add-form select { background: #0a0b0e; border-color: #242832; color: #c8cdd6; }
 [data-theme="oled"] .cron-job { background: #0a0b0e; border-color: #1c1f26; }
-[data-theme="oled"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="oled"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -525,7 +597,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="forest"] .add-form { background: #ffffff; }
 [data-theme="forest"] .add-form input, [data-theme="forest"] .add-form select { background: #ffffff; border-color: #d5e2cf; color: #2c3d2e; }
 [data-theme="forest"] .cron-job { background: #ffffff; border-color: #d5e2cf; }
-[data-theme="forest"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="forest"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -1692,6 +1776,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 }
 .kb-stats-actions .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
 .kb-stats-actions .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
 .kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
@@ -1727,6 +1823,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px; line-height: 1.6; margin: 0; color: var(--text); background: transparent; max-height: 220px; overflow-y: auto;
 }
+.kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
 .kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
@@ -2761,7 +2869,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="cartoon"] .add-form { background: rgba(255, 255, 255, 0.85); }
 [data-theme="cartoon"] .add-form input, [data-theme="cartoon"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #d5e8cf; color: #33424f; }
 [data-theme="cartoon"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #d5e8cf; }
-[data-theme="cartoon"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="cartoon"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -2850,7 +2970,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="particles"] .add-form { background: rgba(24, 27, 56, 0.8); }
 [data-theme="particles"] .add-form input, [data-theme="particles"] .add-form select { background: rgba(22, 27, 52, 0.85); border-color: #2a3158; color: #e6e9f5; }
 [data-theme="particles"] .cron-job { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
-[data-theme="particles"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="particles"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;
@@ -2952,7 +3084,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="particles-light"] .add-form { background: rgba(255, 255, 255, 0.85); }
 [data-theme="particles-light"] .add-form input, [data-theme="particles-light"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
 [data-theme="particles-light"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
-[data-theme="particles-light"] .kb-doc-filter { margin-bottom: 10px; }
+[data-theme="particles-light"] .kb-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.kb-selector select {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none; cursor: pointer;
+}
+.kb-selector select:focus { border-color: #2563eb; }
+.kb-selector .kd-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; white-space: nowrap;
+}
+.kb-selector .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-selector .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
 .kb-doc-filter input {
   width: 100%; padding: 7px 12px; border: 1px solid var(--border);
   border-radius: 8px; font-size: 13px; background: white; outline: none;

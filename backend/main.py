@@ -8,7 +8,7 @@ import random
 import string
 import mimetypes
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, UploadFile, File, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -816,13 +816,35 @@ def agent_loop(provider, model, body, rag_context):
 
 
 # ================= 知识库 RAG =================
+@app.get("/api/kb/list")
+def api_kb_list():
+    return rag.list_kbs()
+
+
+@app.post("/api/kb/create")
+def api_kb_create(body: dict):
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "名称不能为空")
+    kb_id = rag.create_kb(name)
+    return {"id": kb_id, "name": name}
+
+
+@app.delete("/api/kb/{kb_id}")
+def api_kb_delete_kb(kb_id: str):
+    if kb_id == "default":
+        raise HTTPException(400, "默认知识库不可删除")
+    rag.delete_kb(kb_id)
+    return {"ok": True}
+
+
 @app.get("/api/kb/docs")
-def api_kb_docs():
-    return rag.list_docs()
+def api_kb_docs(kb_id: str = None):
+    return rag.list_docs(kb_id)
 
 
 @app.post("/api/kb/upload")
-async def api_kb_upload(file: UploadFile = File(...)):
+async def api_kb_upload(file: UploadFile = File(...), kb_id: str = Form("default")):
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "文件过大（>10MB）")
@@ -834,10 +856,10 @@ async def api_kb_upload(file: UploadFile = File(...)):
     # PDF/Word 是二进制格式但有专用解析器，放行；其余二进制（伪装文本）拒绝
     if ext not in ("pdf", "docx") and rag._is_binary(content):
         raise HTTPException(400, f"文件内容是二进制格式（{rag._binary_name(content)}），不是文本文件")
-    doc_id, n, is_dup = rag.add_document(file.filename, content)
+    doc_id, n, is_dup = rag.add_document(file.filename, content, kb_id=kb_id)
     if not doc_id:
         raise HTTPException(400, "文档内容过少，无法建立知识库")
-    return {"id": doc_id, "chunks": n, "name": file.filename, "duplicate": is_dup}
+    return {"id": doc_id, "chunks": n, "name": file.filename, "duplicate": is_dup, "kb_id": kb_id}
 
 
 @app.delete("/api/kb/docs/{doc_id}")
@@ -851,9 +873,10 @@ def api_kb_search(body: dict):
     query = body.get("query", "")
     top_k = int(body.get("top_k", 5))
     highlight = bool(body.get("highlight", False))
+    kb_id = body.get("kb_id") or None
     if highlight:
-        return rag.search_with_highlight(query, top_k)
-    return rag.search(query, top_k)
+        return rag.search_with_highlight(query, top_k, kb_id=kb_id)
+    return rag.search(query, top_k, kb_id=kb_id)
 
 
 @app.get("/api/kb/docs/{doc_id}")
@@ -874,17 +897,17 @@ def api_kb_doc_rename(doc_id: str, body: dict):
 
 
 @app.get("/api/kb/stats")
-def api_kb_stats():
-    docs = rag.list_docs()
+def api_kb_stats(kb_id: str = None):
+    docs = rag.list_docs(kb_id)
     total_chunks = sum(d.get("chunks", 0) for d in docs)
     total_size = sum(d.get("size", 0) for d in docs)
     return {"doc_count": len(docs), "chunk_count": total_chunks, "total_size": total_size, "supported": list(rag.TEXT_EXTS.values())}
 
 
 @app.get("/api/kb/export")
-def api_kb_export():
-    """导出全部知识库文档（含分块），返回 JSON 下载"""
-    docs = rag.list_docs()
+def api_kb_export(kb_id: str = None):
+    """导出知识库文档（含分块），返回 JSON 下载；kb_id 非空时只导出该库"""
+    docs = rag.list_docs(kb_id)
     data = []
     for d in docs:
         detail = rag.get_doc(d["id"])
@@ -908,9 +931,10 @@ def api_kb_export():
 
 
 @app.post("/api/kb/clear")
-def api_kb_clear():
-    """清空全部知识库"""
-    rag.clear_all()
+def api_kb_clear(body: dict = None):
+    """清空知识库；body.kb_id 非空时只清空该库"""
+    body = body or {}
+    rag.clear_all(body.get("kb_id") or None)
     return {"ok": True}
 
 

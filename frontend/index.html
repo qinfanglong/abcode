@@ -857,6 +857,11 @@
       <button class="modal-close" onclick="closeKb()">✕</button>
     </div>
     <div class="modal-body">
+      <div class="kb-selector">
+        <select id="kb-select" onchange="switchKb(this.value)"></select>
+        <button class="kd-btn" title="新建知识库" onclick="createKbPrompt()">＋ 新建</button>
+        <button class="kd-btn kd-del" title="删除当前知识库(默认库不可删)" onclick="deleteKbPrompt()">🗑 删除</button>
+      </div>
       <div class="kb-stats" id="kb-stats" style="display:none">
         <span>📄 文档 <b id="kb-stat-docs">0</b></span>
         <span>🧩 分块 <b id="kb-stat-chunks">0</b></span>

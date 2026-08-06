@@ -67,6 +67,12 @@ def _binary_name(content: bytes):
 def init_kb():
     conn = get_conn()
     conn.execute("""
+    CREATE TABLE IF NOT EXISTS kb (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        created_at REAL
+    )""")
+    conn.execute("""
     CREATE TABLE IF NOT EXISTS kb_docs (
         id TEXT PRIMARY KEY,
         name TEXT,
@@ -74,7 +80,8 @@ def init_kb():
         chunks INTEGER,
         created_at REAL,
         ext TEXT DEFAULT '',
-        content_hash TEXT DEFAULT ''
+        content_hash TEXT DEFAULT '',
+        kb_id TEXT DEFAULT 'default'
     )""")
     conn.execute("""
     CREATE TABLE IF NOT EXISTS kb_chunks (
@@ -86,17 +93,65 @@ def init_kb():
     # 为检索加速建索引
     try:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_kb_chunks_doc ON kb_chunks(doc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_kb_docs_kb ON kb_docs(kb_id)")
     except Exception:
         pass
-    # 迁移：老库没有 ext 列时补上
+    # 迁移：老库补列
     try:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(kb_docs)").fetchall()]
         if "ext" not in cols:
             conn.execute("ALTER TABLE kb_docs ADD COLUMN ext TEXT DEFAULT ''")
         if "content_hash" not in cols:
             conn.execute("ALTER TABLE kb_docs ADD COLUMN content_hash TEXT DEFAULT ''")
+        if "kb_id" not in cols:
+            conn.execute("ALTER TABLE kb_docs ADD COLUMN kb_id TEXT DEFAULT 'default'")
     except Exception:
         pass
+    # 确保默认知识库存在
+    cnt = conn.execute("SELECT COUNT(*) FROM kb").fetchone()[0]
+    if cnt == 0:
+        conn.execute("INSERT INTO kb (id, name, created_at) VALUES ('default', '默认知识库', ?)", (time.time(),))
+    conn.commit()
+    conn.close()
+
+
+# ================= 多知识库 =================
+def list_kbs():
+    """列出全部知识库（含文档/分块统计）"""
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM kb ORDER BY created_at ASC").fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["doc_count"] = conn.execute("SELECT COUNT(*) FROM kb_docs WHERE kb_id=?", (d["id"],)).fetchone()[0]
+        d["chunk_count"] = conn.execute(
+            "SELECT COUNT(*) FROM kb_chunks WHERE doc_id IN (SELECT id FROM kb_docs WHERE kb_id=?)",
+            (d["id"],)).fetchone()[0]
+        out.append(d)
+    conn.close()
+    return out
+
+
+def create_kb(name: str) -> str:
+    """创建知识库，返回 id"""
+    name = (name or "").strip() or "新建知识库"
+    kb_id = hashlib.md5(f"{name}{time.time()}".encode()).hexdigest()[:12]
+    conn = get_conn()
+    conn.execute("INSERT INTO kb (id, name, created_at) VALUES (?,?,?)", (kb_id, name, time.time()))
+    conn.commit()
+    conn.close()
+    return kb_id
+
+
+def delete_kb(kb_id: str):
+    """删除知识库（连同其文档与分块）"""
+    conn = get_conn()
+    doc_ids = [r[0] for r in conn.execute("SELECT id FROM kb_docs WHERE kb_id=?", (kb_id,)).fetchall()]
+    if doc_ids:
+        marks = ",".join("?" * len(doc_ids))
+        conn.execute(f"DELETE FROM kb_chunks WHERE doc_id IN ({marks})", doc_ids)
+    conn.execute("DELETE FROM kb_docs WHERE kb_id=?", (kb_id,))
+    conn.execute("DELETE FROM kb WHERE id=?", (kb_id,))
     conn.commit()
     conn.close()
 
@@ -290,26 +345,26 @@ def _split_long(para, size, overlap):
     return out
 
 
-def add_document(filename: str, content: bytes):
-    """添加文档，返回 (doc_id, chunk_count)；不支持格式或内容过少返回 (None, 0)"""
+def add_document(filename: str, content: bytes, kb_id: str = "default"):
+    """添加文档到指定知识库，返回 (doc_id, chunk_count, is_dup)；不支持格式或内容过少返回 (None, 0, False)"""
     text, ext = _decode_content(filename, content)
     if text is None:
-        return None, 0
+        return None, 0, False
     if len(text.strip()) < 20:
-        return None, 0
+        return None, 0, False
     chunks = _chunk_text(text, ext=ext)
     if not chunks:
-        return None, 0
+        return None, 0, False
     content_hash = hashlib.md5(content).hexdigest()
-    # 去重检测：内容相同的文档返回重复标志
+    # 去重检测：同一知识库内内容相同则跳过
     conn = get_conn()
-    dup = conn.execute("SELECT id, name FROM kb_docs WHERE content_hash=?", (content_hash,)).fetchone()
+    dup = conn.execute("SELECT id, name FROM kb_docs WHERE content_hash=? AND kb_id=?", (content_hash, kb_id)).fetchone()
     if dup:
         conn.close()
         return dup["id"], len(chunks), True
-    doc_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:12]
-    conn.execute("INSERT INTO kb_docs (id,name,size,chunks,created_at,ext,content_hash) VALUES (?,?,?,?,?,?,?)",
-                 (doc_id, filename, len(content), len(chunks), time.time(), ext, content_hash))
+    doc_id = hashlib.md5(f"{filename}{time.time()}{kb_id}".encode()).hexdigest()[:12]
+    conn.execute("INSERT INTO kb_docs (id,name,size,chunks,created_at,ext,content_hash,kb_id) VALUES (?,?,?,?,?,?,?,?)",
+                 (doc_id, filename, len(content), len(chunks), time.time(), ext, content_hash, kb_id))
     for i, c in enumerate(chunks):
         conn.execute("INSERT INTO kb_chunks (id,doc_id,content,idx) VALUES (?,?,?,?)",
                      (f"{doc_id}_{i}", doc_id, c, i))
@@ -318,18 +373,22 @@ def add_document(filename: str, content: bytes):
     return doc_id, len(chunks), False
 
 
-def find_duplicate(content: bytes):
-    """检查内容是否已存在，返回 (doc_id, name) 或 None"""
+def find_duplicate(content: bytes, kb_id: str = "default"):
+    """检查内容在指定知识库中是否已存在，返回 (doc_id, name) 或 None"""
     content_hash = hashlib.md5(content).hexdigest()
     conn = get_conn()
-    row = conn.execute("SELECT id, name FROM kb_docs WHERE content_hash=?", (content_hash,)).fetchone()
+    row = conn.execute("SELECT id, name FROM kb_docs WHERE content_hash=? AND kb_id=?", (content_hash, kb_id)).fetchone()
     conn.close()
     return (row["id"], row["name"]) if row else None
 
 
-def list_docs():
+def list_docs(kb_id: str = None):
+    """列出文档；kb_id 为空时列出全部"""
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM kb_docs ORDER BY created_at DESC").fetchall()
+    if kb_id:
+        rows = conn.execute("SELECT * FROM kb_docs WHERE kb_id=? ORDER BY created_at DESC", (kb_id,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM kb_docs ORDER BY created_at DESC").fetchall()
     conn.close()
     out = []
     for r in rows:
@@ -347,11 +406,18 @@ def delete_doc(doc_id):
     conn.close()
 
 
-def clear_all():
-    """清空全部知识库文档"""
+def clear_all(kb_id: str = None):
+    """清空知识库文档；kb_id 为空时清空全部"""
     conn = get_conn()
-    conn.execute("DELETE FROM kb_chunks")
-    conn.execute("DELETE FROM kb_docs")
+    if kb_id:
+        doc_ids = [r[0] for r in conn.execute("SELECT id FROM kb_docs WHERE kb_id=?", (kb_id,)).fetchall()]
+        if doc_ids:
+            marks = ",".join("?" * len(doc_ids))
+            conn.execute(f"DELETE FROM kb_chunks WHERE doc_id IN ({marks})", doc_ids)
+        conn.execute("DELETE FROM kb_docs WHERE kb_id=?", (kb_id,))
+    else:
+        conn.execute("DELETE FROM kb_chunks")
+        conn.execute("DELETE FROM kb_docs")
     conn.commit()
     conn.close()
 
@@ -405,10 +471,17 @@ def _tokenize(text, for_query=False):
     return tokens
 
 
-def _bm25_index():
-    """构建内存索引：df[term]、doc_lens、doc_terms[doc_id] -> {term: count}"""
+def _bm25_index(kb_id: str = None):
+    """构建内存索引：df[term]、doc_lens、doc_terms[doc_id] -> {term: count}
+    kb_id 非空时只索引该知识库的文档"""
     conn = get_conn()
-    rows = conn.execute("SELECT id, doc_id, content, idx FROM kb_chunks").fetchall()
+    if kb_id:
+        rows = conn.execute(
+            "SELECT c.id, c.doc_id, c.content, c.idx FROM kb_chunks c "
+            "JOIN kb_docs d ON c.doc_id=d.id WHERE d.kb_id=?",
+            (kb_id,)).fetchall()
+    else:
+        rows = conn.execute("SELECT id, doc_id, content, idx FROM kb_chunks").fetchall()
     conn.close()
     df = {}
     doc_terms = {}
@@ -428,8 +501,8 @@ def _bm25_index():
     return df, doc_terms, doc_lens, rows
 
 
-def search(query, top_k=5):
-    """BM25 关键词检索，返回最相关片段列表（含命中词高亮信息）"""
+def search(query, top_k=5, kb_id: str = None):
+    """BM25 关键词检索（可限定知识库），返回最相关片段列表（含命中词高亮信息）"""
     q_terms = _tokenize(query, for_query=True)
     # 短查询（无 bigram 命中可能）时回退到含单字的完整分词
     if len(q_terms) <= 1 and len(re.findall(r"[\u4e00-\u9fff]", query)) >= 1:
@@ -437,7 +510,7 @@ def search(query, top_k=5):
     q_terms = list(dict.fromkeys(q_terms))  # 去重保序
     if not q_terms:
         return []
-    df, doc_terms, doc_lens, rows = _bm25_index()
+    df, doc_terms, doc_lens, rows = _bm25_index(kb_id)
     N = max(len(doc_terms), 1)
     avg_len = (sum(doc_lens.values()) / N) if N else 0
 
@@ -518,9 +591,9 @@ def _snippet(content, hits, max_len=400):
     return snippet
 
 
-def search_with_highlight(query, top_k=5):
+def search_with_highlight(query, top_k=5, kb_id: str = None):
     """检索 + 生成命中词高亮 HTML 片段（<mark>），前端可直接展示"""
-    results = search(query, top_k)
+    results = search(query, top_k, kb_id=kb_id)
     q_terms = _tokenize(query, for_query=True)
     if len(q_terms) <= 1 and len(re.findall(r"[\u4e00-\u9fff]", query)) >= 1:
         q_terms = _tokenize(query, for_query=False)
@@ -556,11 +629,12 @@ def search_with_highlight(query, top_k=5):
     return results
 
 
-def build_context(query, top_k=4, per_doc=2):
+def build_context(query, top_k=4, per_doc=2, kb_id: str = None):
     """构建 RAG 上下文文本（聊天注入用），无匹配返回 None。
     top_k 总片段数上限；per_doc 同一文档最多取片段数，避免单个文档垄断上下文。
+    kb_id 非空时只从该知识库检索。
     """
-    results = search(query, top_k * 2)
+    results = search(query, top_k * 2, kb_id=kb_id)
     if not results:
         return None
     # 按文档聚合，每文档最多 per_doc 块
