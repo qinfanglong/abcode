@@ -52,55 +52,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: 构建 Windows 源码包
-        shell: powershell
+        shell: bash
         env:
           VERSION: ${{ github.ref_name }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = $env:VERSION.TrimStart('v')
+          set -euo pipefail
+          version="${VERSION#v}"
           
-          Write-Host "Checking available tools..."
-          Write-Host "7z: $(Get-Command 7z -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)"
-          Write-Host "Current directory: $(Get-Location)"
+          echo "Checking tar..."
+          tar --version
+          echo "Current directory: $(pwd)"
+          echo "Files: $(ls -la)"
           
-          # Create dist directory
-          New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
+          mkdir -p dist_windows
           
-          # Simple approach: zip the whole repo (excluding .git)
-          $binaryName = "ABcode-windows-${version}.zip"
-          Write-Host "Creating package: $binaryName"
+          # Binary package
+          binaryName="ABcode-windows-${version}.tar.gz"
+          echo "Creating binary package: $binaryName"
+          tar -czf "dist_windows/$binaryName" backend frontend macapp scripts
           
-          # Use 7z if available
-          if (Get-Command 7z -ErrorAction SilentlyContinue) {
-            Write-Host "Using 7-Zip"
-            & 7z a -tzip "dist_windows/$binaryName" . -xr!.git -xr!dist_windows -xr!__pycache__ -xr!.venv -xr!node_modules
-          } else {
-            Write-Host "Using Compress-Archive"
-            # Create a temp directory with files to zip
-            $tempDir = "dist_windows_temp"
-            if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-            New-Item -ItemType Directory -Path $tempDir | Out-Null
-            
-            # Copy all files except exclusions
-            Get-ChildItem -File -Recurse | Where-Object { 
-              $_.FullName -notmatch '\\.git\\' -and 
-              $_.FullName -notmatch '\\dist_windows\\' -and
-              $_.FullName -notmatch '__pycache__' -and
-              $_.FullName -notmatch '\\.venv\\' -and
-              $_.FullName -notmatch 'node_modules'
-            } | Copy-Item -Destination $tempDir -Recurse -Force
-            
-            Compress-Archive -Path "$tempDir/*" -DestinationPath "dist_windows/$binaryName" -Force
-            Remove-Item $tempDir -Recurse -Force
-          }
+          # Source package
+          sourceName="ABcode-windows-source-${version}.tar.gz"
+          echo "Creating source package: $sourceName"
+          tar -czf "dist_windows/$sourceName" \
+            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
           
           # Verify
-          $zipFile = Get-Item "dist_windows/$binaryName"
-          Write-Host "Package created: $($zipFile.Name) ($($zipFile.Length) bytes)"
+          ls -la dist_windows/
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist_windows/*.zip
+          path: dist_windows/*.tar.gz
           if-no-files-found: ignore
 
   release:
