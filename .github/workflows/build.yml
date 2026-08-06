@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  VERSION: ${{ github.ref_name }}
+
 jobs:
   build-mac:
     runs-on: macos-latest
@@ -14,14 +17,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: 构建 Mac .app
+      - name: 构建 Mac .app + DMG
         run: |
           chmod +x build_mac.sh
           ./build_mac.sh
-          cd dist && zip -r ABcode-mac-${{ github.ref_name }}.zip ABcode.app
       - uses: actions/upload-artifact@v4
         with:
           name: mac-dist
+          path: dist/ABcode-mac-*.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-zip
           path: dist/ABcode-mac-*.zip
 
   build-linux:
@@ -31,107 +37,168 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: 构建 Linux 包
+      - name: 安装系统依赖
         run: |
-          python -m pip install -r backend/requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-dev libwebkit2gtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf desktop-file-utils \
+            fuse libfuse2 squashfs-tools
+      - name: 创建虚拟环境并安装依赖
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+      - name: PyInstaller 打包 Linux
+        run: |
+          source .venv/bin/activate
+          pyinstaller \
+            --onefile \
+            --name ABcode \
+            --add-data "frontend:frontend" \
+            --add-data "backend:backend" \
+            --add-data "backend/requirements.txt:." \
+            --hidden-import=uvicorn \
+            --hidden-import=fastapi \
+            --hidden-import=sqlite3 \
+            --hidden-import=websockets \
+            --hidden-import=httpx \
+            backend/main.py
+      - name: 创建 AppImage
+        run: |
+          # 创建 AppDir 结构
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # 复制可执行文件
+          cp dist/ABcode AppDir/usr/bin/
+          
+          # 创建 .desktop 文件
+          cat > AppDir/usr/share/applications/abcode.desktop << 'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=ABcode
+          Exec=ABcode
+          Icon=abcode
+          Categories=Development;Utility;
+          Comment=Local AI Agent Desktop App
+          EOF
+          
+          # 复制图标
+          cp build/icon.ico AppDir/usr/share/icons/hicolor/256x256/apps/abcode.png 2>/dev/null || \
+          cp frontend/abcode_logo.svg AppDir/usr/share/icons/hicolor/256x256/apps/abcode.svg 2>/dev/null || true
+          
+          # AppRun 入口
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export PYTHONPATH="$HERE/usr/bin:$PYTHONPATH"
+          exec "$HERE/usr/bin/ABcode" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          
+          # 下载 appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          
+          # 生成 AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir ABcode-linux-${VERSION#v}.AppImage
+      - name: 创建源码包
+        run: |
           mkdir -p dist_linux
-          tar -czf dist_linux/ABcode-linux-${{ github.ref_name }}.tar.gz \
-            backend frontend macapp scripts 2>/dev/null || \
-          tar -czf dist_linux/ABcode-linux-${{ github.ref_name }}.tar.gz \
-            backend frontend macapp
-          tar -czf dist_linux/ABcode-linux-source-${{ github.ref_name }}.tar.gz \
-            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE 2>/dev/null || true
+          tar -czf dist_linux/ABcode-linux-source-${VERSION#v}.tar.gz \
+            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: linux-dist
-          path: dist_linux/
-          if-no-files-found: ignore
+          path: |
+            ABcode-linux-*.AppImage
+            dist_linux/*.tar.gz
 
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 构建 Windows 源码包
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 安装 PyInstaller 和 NSIS
+        run: |
+          python -m pip install pyinstaller --quiet
+          choco install nsis -y --no-progress
+      - name: PyInstaller 打包 Windows 单文件 exe
         shell: powershell
-        env:
-          VERSION: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = "Stop"
           $version = $env:VERSION.TrimStart('v')
           
-          Write-Host "Creating Windows packages..."
-          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Building Windows executable with PyInstaller..."
+          python -m PyInstaller `
+            --onefile `
+            --name ABcode `
+            --icon=build/icon.ico `
+            --add-data "frontend;frontend" `
+            --add-data "backend;backend" `
+            --add-data "backend/requirements.txt;." `
+            --hidden-import=uvicorn `
+            --hidden-import=fastapi `
+            --hidden-import=sqlite3 `
+            --hidden-import=websockets `
+            --hidden-import=httpx `
+            backend/main.py
           
-          # Create dist directory
-          New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
-          
-          # Check what directories/files exist
-          $dirsToCheck = @("backend", "frontend", "macapp", "scripts", "docs", "build")
-          foreach ($d in $dirsToCheck) {
-            if (Test-Path $d) {
-              Write-Host "Directory exists: $d"
-            } else {
-              Write-Host "Directory NOT found: $d"
-            }
+          if (-not (Test-Path "dist/ABcode.exe")) {
+            Write-Error "PyInstaller failed - dist/ABcode.exe not found"
+            exit 1
           }
+          Write-Host "PyInstaller success: dist/ABcode.exe created"
           
-          $filesToCheck = @("start.sh", "start.bat", "requirements.txt", "README.md", "CHANGELOG.md", "LICENSE")
-          foreach ($f in $filesToCheck) {
-            if (Test-Path $f) {
-              Write-Host "File exists: $f"
-            } else {
-              Write-Host "File NOT found: $f"
-            }
+          # 复制便携版 exe 到 dist 根目录用于上传
+          Copy-Item dist/ABcode.exe dist/ABcode-${version}.exe
+      - name: 创建 NSIS 安装包
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:VERSION.TrimStart('v')
+          
+          Write-Host "Creating NSIS installer..."
+          
+          # 准备安装器资源
+          Copy-Item dist/ABcode.exe dist/ABcode.exe -Force
+          Copy-Item build/start_windows.bat dist/ -Force
+          Copy-Item build/icon.ico dist/ -Force
+          New-Item -ItemType Directory -Force -Path dist/build | Out-Null
+          Copy-Item build/icon.ico dist/build/ -Force
+          Copy-Item build/banner.bmp dist/build/ -Force
+          
+          # 运行 NSIS
+          $nsisPath = Get-Command makensis.exe -ErrorAction SilentlyContinue
+          if (-not $nsisPath) {
+            $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
           }
+          & $nsisPath /DVERSION="$version" build/installer.nsi
           
-          # Binary package - use explicit file list
-          $binaryName = "ABcode-windows-${version}.zip"
-          Write-Host "Creating binary package: $binaryName"
-          
-          # Create a temp directory structure
-          $tempDir = "dist_windows_temp_binary"
-          if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-          New-Item -ItemType Directory -Path $tempDir | Out-Null
-          
-          if (Test-Path "backend") { Copy-Item -Recurse backend "$tempDir/" }
-          if (Test-Path "frontend") { Copy-Item -Recurse frontend "$tempDir/" }
-          if (Test-Path "macapp") { Copy-Item -Recurse macapp "$tempDir/" }
-          if (Test-Path "scripts") { Copy-Item -Recurse scripts "$tempDir/" }
-          
-          Compress-Archive -Path "$tempDir/*" -DestinationPath "dist_windows/$binaryName" -Force
-          Remove-Item $tempDir -Recurse -Force
-          
-          # Source package
-          $sourceName = "ABcode-windows-source-${version}.zip"
-          Write-Host "Creating source package: $sourceName"
-          
-          $tempDir2 = "dist_windows_temp_source"
-          if (Test-Path $tempDir2) { Remove-Item $tempDir2 -Recurse -Force }
-          New-Item -ItemType Directory -Path $tempDir2 | Out-Null
-          
-          if (Test-Path "backend") { Copy-Item -Recurse backend "$tempDir2/" }
-          if (Test-Path "frontend") { Copy-Item -Recurse frontend "$tempDir2/" }
-          if (Test-Path "macapp") { Copy-Item -Recurse macapp "$tempDir2/" }
-          if (Test-Path "start.sh") { Copy-Item start.sh "$tempDir2/" }
-          if (Test-Path "start.bat") { Copy-Item start.bat "$tempDir2/" }
-          if (Test-Path "requirements.txt") { Copy-Item requirements.txt "$tempDir2/" }
-          if (Test-Path "README.md") { Copy-Item README.md "$tempDir2/" }
-          if (Test-Path "docs") { Copy-Item -Recurse docs "$tempDir2/" }
-          if (Test-Path "CHANGELOG.md") { Copy-Item CHANGELOG.md "$tempDir2/" }
-          if (Test-Path "LICENSE") { Copy-Item LICENSE "$tempDir2/" }
-          
-          Compress-Archive -Path "$tempDir2/*" -DestinationPath "dist_windows/$sourceName" -Force
-          Remove-Item $tempDir2 -Recurse -Force
-          
-          # Verify
-          Get-ChildItem dist_windows/ | ForEach-Object { 
-            Write-Host "  $($_.Name) ($($_.Length) bytes)" 
+          # 验证安装包
+          $installer = Get-ChildItem dist/ABcode-Setup-*.exe -ErrorAction SilentlyContinue
+          if ($installer) {
+            Write-Host "Installer created: $($installer.FullName) ($($installer.Length) bytes)"
+          } else {
+            Write-Error "Installer not found"
+            exit 1
           }
+      - name: 创建 Windows 源码包
+        shell: powershell
+        run: |
+          $version = $env:VERSION.TrimStart('v')
+          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "requirements.txt", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist/ABcode-windows-source-${version}.zip" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist_windows/*.zip
-          if-no-files-found: ignore
+          path: |
+            dist/ABcode-Setup-*.exe
+            dist/ABcode-*.exe
+            dist/ABcode-windows-source-*.zip
 
   release:
     needs: [build-mac, build-linux, build-windows]
@@ -144,11 +211,19 @@ jobs:
         with:
           path: dist/
           merge-multiple: true
+      - name: 整理文件
+        run: |
+          find dist -type f -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.tar.gz" -o -name "*.exe" | head -20
+          ls -la dist/
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.zip
-            dist/*.tar.gz
-            dist/*.exe
+            dist/**/ABcode-mac-*.dmg
+            dist/**/ABcode-mac-*.zip
+            dist/**/ABcode-linux-*.AppImage
+            dist/**/ABcode-linux-source-*.tar.gz
+            dist/**/ABcode-Setup-*.exe
+            dist/**/ABcode-*.exe
+            dist/**/ABcode-windows-source-*.zip
           generate_release_notes: true

@@ -1,6 +1,7 @@
 """ABcode - AI Agent 工具主入口 v0.3.0"""
 import json
 import os
+import sys
 import time
 import uuid
 import random
@@ -22,7 +23,7 @@ import skills as skills_mod
 import mcp_client
 import connector as connector_mod
 import updater
-import workflow as workflow_mod
+import workflow_mod as workflow_mod
 
 app = FastAPI(title="ABcode", version=updater.VERSION)
 
@@ -33,8 +34,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_DIR = Path(os.environ.get("ABCODE_FRONTEND", Path(__file__).parent.parent / "frontend"))
-UPLOAD_DIR = Path(os.environ.get("ABCODE_UPLOADS", Path(__file__).parent.parent / "data" / "uploads"))
+# PyInstaller 支持：运行时文件在 sys._MEIPASS 中
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).parent.parent
+
+FRONTEND_DIR = Path(os.environ.get("ABCODE_FRONTEND", BASE_DIR / "frontend"))
+UPLOAD_DIR = Path(os.environ.get("ABCODE_UPLOADS", BASE_DIR / "data" / "uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
