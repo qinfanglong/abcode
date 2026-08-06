@@ -794,7 +794,25 @@ def agent_loop(provider, model, body, rag_context):
 
         messages.extend(tool_results_msgs)
 
-    yield f"data: {json.dumps({'error': '工具调用轮数超限'}, ensure_ascii=False)}\n\n"
+    # ===== 轮数用尽：不报错中断，而是基于已收集的工具结果强制收尾 =====
+    # 防止模型陷入无限工具调用循环导致前端"调用工具后无最终回复/中断"。
+    messages.append({
+        "role": "user",
+        "content": "（请基于以上工具调用已经获得的信息，现在直接给出最终回答，不要再调用任何工具。）",
+    })
+    # 无 tools 再跑一轮，确保拿到最终文本
+    final_parts = []
+    try:
+        for evt in llm.stream_chat(provider, model, messages, tools=None):
+            if evt["type"] == "text":
+                final_parts.append(evt["content"])
+                yield f"data: {json.dumps({'delta': evt['content']}, ensure_ascii=False)}\n\n"
+    except Exception as e:
+        yield f"data: {json.dumps({'error': f'收尾失败: {e}'}, ensure_ascii=False)}\n\n"
+    final_text = "".join(final_parts)
+    if final_text.strip():
+        db.add_message(body.conv_id, "assistant", final_text)
+    yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
 
 
 # ================= 知识库 RAG =================

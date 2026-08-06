@@ -4286,6 +4286,20 @@ function setToolStatus(card, status, text) {
   follow();
 }
 
+// 工具结果：不仅更新状态头，还用 HTML 渲染实际返回内容到卡片体内
+function setToolResult(card, ok, statusText, resultHtml) {
+  const head = card.querySelector(".tool-status");
+  head.textContent = statusText || (ok ? "✅ 完成" : "❌ 失败");
+  head.className = "tool-status " + (ok ? "ok" : "err");
+  const resultPre = card.querySelector(".tool-result");
+  if (resultPre) {
+    // 用 innerHTML 渲染组装好的结果块（长度超限时自动折叠）
+    resultPre.innerHTML = resultHtml;
+  }
+  card.classList.remove("open");
+  follow();
+}
+
 // ===== 发送：队列 / 抢断 / 自动压缩 =====
 let sendQueue = [];
 let queueSeq = 0;
@@ -4439,8 +4453,20 @@ async function doSend(text, attachFiles = null) {
           currentTool = createToolCard(payload.tool_start.name, payload.tool_start.args);
         } else if (payload.tool_result) {
           if (currentTool) {
-            setToolStatus(currentTool, payload.tool_result.ok ? "ok" : "err",
-              payload.tool_result.ok ? "✅ 完成" : "❌ 失败");
+            // 在卡片里展示工具实际返回内容（而非仅状态），展开即可看到完整结果
+            let resText = typeof payload.tool_result.result === "string"
+              ? payload.tool_result.result : JSON.stringify(payload.tool_result.result || {}, null, 2);
+            // 结果很长时折叠：卡片里保留前 800 字符，剩余放入 <details>
+            const MAX = 800;
+            let resultHtml;
+            if (resText.length > MAX) {
+              resultHtml = `<span class="tool-result-trunc">${esc(resText.slice(0, MAX))}…</span>`
+                + `<details class="tool-result-more"><summary>展开完整结果（${resText.length}字符）</summary><pre>${esc(resText)}</pre></details>`;
+            } else {
+              resultHtml = `<pre class="tool-result-full">${esc(resText)}</pre>`;
+            }
+            setToolResult(currentTool, payload.tool_result.ok,
+              payload.tool_result.ok ? "✅ 完成" : "❌ 失败", resultHtml);
           }
         } else if (payload.error) {
           // 追加错误信息而不是覆盖已生成内容，避免"工具调用后中断/丢失"

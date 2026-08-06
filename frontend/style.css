@@ -214,6 +214,75 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="minimal"] .msg.assistant .avatar { background: linear-gradient(135deg, #6b7280, #52525b); }
 [data-theme="minimal"] .msg.user .avatar { background: #e0e0e6; color: #4a4a55; }
 
+/* ===== 海洋蓝主题（清爽浅蓝海风，亮色低饱和） ===== */
+[data-theme="ocean"] {
+  --sidebar-bg: #e6eff6;
+  --sidebar-text: #335166;
+  --sidebar-hover: #d7e5ef;
+  --primary: #2f78a8;
+  --primary-hover: #276894;
+  --chat-bg: #eef5fa;
+  --chat-text: #20384a;
+  --border: #cfe0ec;
+  --msg-user-bg: #d5e7f3;
+  --msg-assistant-bg: #f5fafd;
+  --input-bg: #ffffff;
+  --text-secondary: #4a6b80;
+  --text-muted: #82a1b5;
+  --card-bg: #ffffff;
+  --modal-bg: #ffffff;
+  --modal-overlay: rgba(40, 70, 100, 0.35);
+  --code-bg: #1d3347;
+  --code-text: #e6f0f7;
+}
+[data-theme="ocean"] body { background: #eef5fa; color: #24484a; }
+[data-theme="ocean"] #topbar { background: #eef5fa; border-color: #cfe0ec; }
+[data-theme="ocean"] #input-bar { background: #eef5fa; border-color: #cfe0ec; }
+[data-theme="ocean"] #sidebar { background: #e6eff6; border-color: #cfe0ec; }
+[data-theme="ocean"] #chat-input { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
+[data-theme="ocean"] .modal-content { background: #ffffff; }
+[data-theme="ocean"] .provider-item { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .provider-item button { background: #e3eef7; border-color: #c3d7e6; color: #245166; }
+[data-theme="ocean"] .preset { background: #ffffff; border-color: #cfe0ec; color: #245166; }
+[data-theme="ocean"] .switch-label { background: #ffffff; border-color: #cfe0ec; color: #245166; }
+[data-theme="ocean"] .topbar-right select { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
+[data-theme="ocean"] .bubble pre { background: #1d3347; }
+[data-theme="ocean"] .tool-card { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .tool-card-head { background: #e6eff6; }
+[data-theme="ocean"] .msg.assistant .bubble { border-color: #cfe0ec; }
+[data-theme="ocean"] .msg.user .bubble { background: #d5e8f3; }
+[data-theme="ocean"] ::-webkit-scrollbar-thumb { background: #b9d2e2; }
+[data-theme="ocean"] #sidebar ::-webkit-scrollbar-thumb { background: #c8dcea; }
+[data-theme="ocean"] .kb-ref-panel { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .kb-ref-search { border-color: #cfe0ec; }
+[data-theme="ocean"] .kb-ref-search input { color: #24484a; }
+[data-theme="ocean"] .channel-enabled-card { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .channel-grid-item { background: #ffffff; border-color: #cfe0ec; color: #245166; }
+[data-theme="ocean"] .mode-popup { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .mode-popup-header { border-color: #cfe0ec; }
+[data-theme="ocean"] .mode-option:hover { background: #e6eff6; }
+[data-theme="ocean"] .mode-option-name { color: #24484a; }
+[data-theme="ocean"] .mode-option-desc { color: #4a6b80; }
+[data-theme="ocean"] .mode-selector-btn { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
+[data-theme="ocean"] .ext-item { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .ext-item button.on { background: #2f78a8; color: white; }
+[data-theme="ocean"] .submit-btn { background: #2f78a8; }
+[data-theme="ocean"] .sub-form { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .sub-form input, [data-theme="ocean"] .sub-form textarea, [data-theme="ocean"] .sub-form select { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
+[data-theme="ocean"] .tab.active { color: #2f78a8; }
+[data-theme="ocean"] .ct-check { background: #ffffff; border-color: #cfe0ec; color: #245166; }
+[data-theme="ocean"] .ct-check.active { border-color: #2f78a8; color: #2f78a8; }
+[data-theme="ocean"] .btn-delete { background: #e6eff6; border-color: #cfe0ec; color: #4a6b80; }
+[data-theme="ocean"] .btn-delete:hover { background: #fde8e8; border-color: #ef4444; color: #ef4444; }
+[data-theme="ocean"] .team-member-card { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .add-form { background: #ffffff; }
+[data-theme="ocean"] .add-form input, [data-theme="ocean"] .add-form select { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
+[data-theme="ocean"] .cron-job { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .kb-doc { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .welcome-logo { background: linear-gradient(135deg, #2f78a8, #27a0c4); }
+[data-theme="ocean"] .msg.assistant .avatar { background: linear-gradient(135deg, #2f78a8, #27a0c4); }
+[data-theme="ocean"] .msg.user .avatar { background: #cfe0ec; color: #245166; }
+
 #app { display: flex; height: 100vh; }
 
 /* ===== 侧边栏 ===== */
@@ -1273,6 +1342,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   font-family: "SF Mono", Consolas, monospace; white-space: pre-wrap; word-break: break-all;
 }
 .tool-card-body .label { color: #6b7280; font-size: 11px; margin: 6px 0 2px; }
+.tool-card-body .tool-result { margin: 4px 0; }
+.tool-card-body .tool-result-trunc { color: #6b7280; font-size: 12px; }
+.tool-card-body .tool-result-more { margin-top: 4px; font-size: 12px; }
+.tool-card-body .tool-result-more summary { cursor: pointer; color: var(--primary); user-select: none; font-size: 12px; }
+.tool-card-body .tool-result-more pre {
+  background: #1e1f22; color: #d1d5db; padding: 10px; border-radius: 8px;
+  overflow-x: auto; font-size: 12px; margin: 4px 0 0; font-family: "SF Mono", Consolas, monospace;
+  white-space: pre-wrap; word-break: break-all;
+}
 
 /* ===== Agent 开关 ===== */
 .switch-label {
@@ -1593,6 +1671,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 .dark-preview { background: linear-gradient(135deg, #1a1a1f 50%, #0f0f11 50%); }
 .sepia-preview { background: linear-gradient(135deg, #f5f0e8 50%, #2c2416 50%); }
 .minimal-preview { background: linear-gradient(135deg, #fbfbfc 50%, #b9bcc4 50%); }
+.ocean-preview { background: linear-gradient(135deg, #eef5fa 50%, #4a90b8 50%); }
 
 /* 字号控制 */
 .font-size-control {
