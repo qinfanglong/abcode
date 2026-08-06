@@ -59,34 +59,36 @@ jobs:
           python -m pip install pyinstaller --quiet
           choco install nsis -y --no-progress
       - name: 构建 Windows .exe 和安装包
-        shell: bash
+        shell: powershell
         env:
           VERSION: ${{ github.ref_name }}
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = "Stop"
+          
           # Build executable with PyInstaller
-          python -m PyInstaller \
-            --onefile \
-            --name ABcode \
-            --icon=build/icon.ico \
-            --add-data "frontend;frontend" \
-            --add-data "backend;backend" \
-            --add-data "backend/requirements.txt;." \
-            --hidden-import=uvicorn \
-            --hidden-import=fastapi \
-            --hidden-import=sqlite3 \
+          python -m PyInstaller `
+            --onefile `
+            --name ABcode `
+            --icon=build/icon.ico `
+            --add-data "frontend;frontend" `
+            --add-data "backend;backend" `
+            --add-data "backend/requirements.txt;." `
+            --hidden-import=uvicorn `
+            --hidden-import=fastapi `
+            --hidden-import=sqlite3 `
             backend/main.py
 
           # Copy resources for installer
-          cp build/start_windows.bat dist/
-          cp build/icon.ico dist/
-          mkdir -p dist/build
-          cp build/icon.ico dist/build/
-          cp build/banner.bmp dist/build/
+          Copy-Item build/start_windows.bat dist/
+          Copy-Item build/icon.ico dist/
+          New-Item -ItemType Directory -Force -Path dist/build | Out-Null
+          Copy-Item build/icon.ico dist/build/
+          Copy-Item build/banner.bmp dist/build/
 
           # Create installer with NSIS (pass version from tag)
           # GitHub Actions Windows runner has NSIS in PATH after choco install
-          makensis /DVERSION="${VERSION#v}" build/installer.nsi
+          $version = $env:VERSION.TrimStart('v')
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /DVERSION="$version" build/installer.nsi
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
