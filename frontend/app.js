@@ -3602,6 +3602,58 @@ function showNodeConfig(nodeId) {
         <div class="ncf-row-inline"><div><label class="ncf-label">项变量名</label><input class="ncf-input" value="${esc(cfg.item_variable||'item')}" onchange="updateNodeConfig('item_variable',this.value)"></div><div><label class="ncf-label">索引变量名</label><input class="ncf-input" value="${esc(cfg.index_variable||'index')}" onchange="updateNodeConfig('index_variable',this.value)"></div></div>
         <div class="ncf-row"><label class="ncf-label">最大次数</label><input class="ncf-input" type="number" value="${cfg.max_iterations||100}" onchange="updateNodeConfig('max_iterations',parseInt(this.value)||100)"></div></div>`;
       break;
+    case "iteration":
+      html += `<div class="ncf-section"><div class="ncf-group-title">遍历配置</div>
+        <div class="ncf-row"><label class="ncf-label">遍历数组</label><input class="ncf-input" value="${esc(cfg.array_variable||'{{input}}')}" onchange="updateNodeConfig('array_variable',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">项变量名</label><input class="ncf-input" value="${esc(cfg.item_variable||'item')}" onchange="updateNodeConfig('item_variable',this.value)"></div></div>`;
+      break;
+    case "kb_index":
+      html += `<div class="ncf-section"><div class="ncf-group-title">知识入库</div>
+        <div class="ncf-row"><label class="ncf-label">目标知识库</label><input class="ncf-input" value="${esc(cfg.kb_id||'default')}" onchange="updateNodeConfig('kb_id',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">文档标题</label><input class="ncf-input" value="${esc(cfg.title||'')}" placeholder="默认 workflow_节点id" onchange="updateNodeConfig('title',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">入库内容</label><textarea class="ncf-input" rows="3" onchange="updateNodeConfig('content',this.value)">${esc(cfg.content||'{{input}}')}</textarea></div>
+        <div class="ncf-row"><label class="ncf-label">模式</label><select class="ncf-input" onchange="updateNodeConfig('mode',this.value)"><option value="append" ${(cfg.mode||'append')==='append'?'selected':''}>追加</option><option value="replace" ${cfg.mode==='replace'?'selected':''}>替换</option></select></div></div>`;
+      break;
+    case "memory_read":
+      html += `<div class="ncf-section"><div class="ncf-group-title">记忆读取</div>
+        <div class="ncf-row"><label class="ncf-label">记忆键</label><input class="ncf-input" value="${esc(cfg.memory_key||'{{input}}')}" onchange="updateNodeConfig('memory_key',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">命名空间</label><input class="ncf-input" value="${esc(cfg.namespace||'default')}" onchange="updateNodeConfig('namespace',this.value)"></div></div>`;
+      break;
+    case "memory_write":
+      html += `<div class="ncf-section"><div class="ncf-group-title">记忆写入</div>
+        <div class="ncf-row"><label class="ncf-label">记忆键</label><input class="ncf-input" value="${esc(cfg.memory_key||'')}" onchange="updateNodeConfig('memory_key',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">内容</label><textarea class="ncf-input" rows="2" onchange="updateNodeConfig('content',this.value)">${esc(cfg.content||'{{input}}')}</textarea></div>
+        <div class="ncf-row"><label class="ncf-label">命名空间</label><input class="ncf-input" value="${esc(cfg.namespace||'default')}" onchange="updateNodeConfig('namespace',this.value)"></div></div>`;
+      break;
+    case "memory_clear":
+      html += `<div class="ncf-section"><div class="ncf-group-title">记忆清除</div>
+        <div class="ncf-row"><label class="ncf-label">命名空间</label><input class="ncf-input" value="${esc(cfg.namespace||'default')}" onchange="updateNodeConfig('namespace',this.value)"></div></div>`;
+      break;
+    case "mcp_call":
+      html += `<div class="ncf-section"><div class="ncf-group-title">MCP 调用</div>
+        <div class="ncf-row"><label class="ncf-label">MCP 服务器</label><input class="ncf-input" id="ncf-mcp-server" value="${esc(cfg.mcp_server||'')}" placeholder="服务器ID或名称" onchange="updateNodeConfig('mcp_server',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">工具名</label><input class="ncf-input" value="${esc(cfg.tool_name||'')}" onchange="updateNodeConfig('tool_name',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">参数 JSON</label><textarea class="ncf-input" rows="3" onchange="updateNodeConfig('arguments',this.value)">${esc(cfg.arguments||'{}')}</textarea></div></div>`;
+      setTimeout(loadMcpServerOptions, 100);
+      break;
+    case "json_parse":
+      html += `<div class="ncf-section"><div class="ncf-group-title">JSON 解析</div>
+        <div class="ncf-row"><label class="ncf-label">输入 JSON</label><textarea class="ncf-input" rows="3" onchange="updateNodeConfig('input',this.value)">${esc(cfg.input||'{{input}}')}</textarea></div>
+        <div class="ncf-hint">解析结果会展开为变量，可通过 {{字段名}} 引用</div></div>`;
+      break;
+    case "email":
+      html += `<div class="ncf-section"><div class="ncf-group-title">发送邮件</div>
+        <div class="ncf-row"><label class="ncf-label">收件人</label><input class="ncf-input" value="${esc(cfg.to||'')}" placeholder="a@b.com, c@d.com" onchange="updateNodeConfig('to',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">主题</label><input class="ncf-input" value="${esc(cfg.subject||'')}" onchange="updateNodeConfig('subject',this.value)"></div>
+        <div class="ncf-row"><label class="ncf-label">正文</label><textarea class="ncf-input" rows="3" onchange="updateNodeConfig('body',this.value)">${esc(cfg.body||'')}</textarea></div>
+        <div class="ncf-hint">需先在设置中配置 SMTP 邮箱</div></div>`;
+      break;
+    case "webhook":
+      html += `<div class="ncf-section"><div class="ncf-group-title">Webhook 回调</div>
+        <div class="ncf-row"><label class="ncf-label">URL</label><input class="ncf-input" value="${esc(cfg.url||'')}" onchange="updateNodeConfig('url',this.value)"></div>
+        <div class="ncf-row-inline"><div><label class="ncf-label">方法</label><select class="ncf-input" onchange="updateNodeConfig('method',this.value)"><option value="POST" ${(cfg.method||'POST')==='POST'?'selected':''}>POST</option><option value="GET" ${cfg.method==='GET'?'selected':''}>GET</option><option value="PUT" ${cfg.method==='PUT'?'selected':''}>PUT</option></select></div></div>
+        <div class="ncf-row"><label class="ncf-label">Body</label><textarea class="ncf-input" rows="2" onchange="updateNodeConfig('body',this.value)">${esc(cfg.body||'')}</textarea></div></div>`;
+      break;
     default:
       html += `<div class="ncf-section"><div class="ncf-hint">暂无特殊配置。</div></div>`;
   }
@@ -3734,6 +3786,19 @@ function updateNodeConfig(key, value) {
   
   renderWorkflowCanvas();
   selectNode(selectedNode);
+}
+
+// 加载 MCP 服务器下拉选项
+async function loadMcpServerOptions() {
+  const input = $("#ncf-mcp-server");
+  if (!input) return;
+  try {
+    const mcps = await api("/api/mcp/servers");
+    if (!mcps || !mcps.length) return;
+    const cur = input.value;
+    const opts = mcps.map(m => `<option value="${esc(m.id)}" ${m.id===cur||m.name===cur?'selected':''}>${esc(m.name||m.id)}</option>`).join("");
+    input.outerHTML = `<select class="ncf-input" id="ncf-mcp-server" onchange="updateNodeConfig('mcp_server',this.value)"><option value="">选择服务器...</option>${opts}</select>`;
+  } catch (e) { /* 忽略，保留文本输入 */ }
 }
 
 // 关闭节点配置
