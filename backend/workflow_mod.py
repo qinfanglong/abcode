@@ -158,9 +158,9 @@ class WorkflowEngine:
                 "nodes_status": self.nodes_status,
             }
 
-    def _execute_node(self, node_id):
+    def _execute_node(self, node_id, _in_loop=False):
         """执行单个节点"""
-        if self._stopped:
+        if self._stopped and not _in_loop:
             return self._final_output
 
         node = self.nodes.get(node_id)
@@ -169,6 +169,7 @@ class WorkflowEngine:
 
         node_type = node.get("type", "")
         config = node.get("config", {})
+        loop_boundary = False
 
         self.nodes_status[node_id] = {"status": "running", "started_at": time.time()}
         self._emit_event("node_status", {
@@ -182,7 +183,13 @@ class WorkflowEngine:
             elif node_type == "end":
                 output = self._execute_end(node, config)
             elif node_type == "stop":
-                output = self._execute_stop(node, config)
+                if _in_loop:
+                    # 循环体内 stop：作为本次迭代边界，不终止主流程
+                    output_field = config.get("output_field", "output")
+                    output = self.variables.get(output_field, "")
+                    loop_boundary = True
+                else:
+                    output = self._execute_stop(node, config)
             elif node_type == "llm":
                 output = self._execute_llm(node, config)
             elif node_type == "kb_search":
@@ -209,6 +216,8 @@ class WorkflowEngine:
                 output = self._execute_aggregator(node, config)
             elif node_type == "template":
                 output = self._execute_template(node, config)
+            elif node_type == "loop":
+                output = self._execute_loop(node, config)
             else:
                 raise RuntimeError(f"未知节点类型: {node_type}")
 
@@ -228,13 +237,17 @@ class WorkflowEngine:
             if self._stopped:
                 return self._final_output
 
-            # 条件/分类节点内部自行路由
-            if node_type in ("condition", "classifier"):
+            # 循环体内 stop/end 边界：本次迭代到此为止，不再向后传播
+            if loop_boundary:
+                return output
+
+            # 条件/分类/循环节点内部自行路由或已执行完子链
+            if node_type in ("condition", "classifier", "loop"):
                 return output
 
             next_node = self._get_next_node(node_id)
             if next_node:
-                return self._execute_node(next_node)
+                return self._execute_node(next_node, _in_loop=_in_loop)
 
             return output
 
@@ -360,6 +373,56 @@ class WorkflowEngine:
         self._final_output = value
         self._store_output(node["id"], value)
         return value
+
+    def _execute_loop(self, node, config):
+        """循环节点：遍历数组，对每项设置 item/index 变量，执行循环体（下游链），收集结果"""
+        array_expr = config.get("array_variable", "{{input}}")
+        item_var = config.get("item_variable", "item") or "item"
+        index_var = config.get("index_variable", "index") or "index"
+        max_iter = int(config.get("max_iterations", 100) or 100)
+        max_iter = max(1, min(max_iter, 1000))
+
+        # 解析数组：支持 {{变量}} 模板或直接变量名
+        raw = render_template(array_expr, self.variables)
+        if isinstance(raw, str) and "{{" not in array_expr:
+            raw = self.variables.get(array_expr.strip("{}").strip(), raw)
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw) if raw.strip().startswith("[") else raw.split(",")
+            except Exception:
+                raw = raw.split(",") if raw else []
+        if not isinstance(raw, list):
+            raw = [raw] if raw else []
+
+        # 找到循环体起点（loop 的下游节点，跳过 start）
+        body_start = self._get_next_node(node["id"])
+
+        results = []
+        loop_guard = getattr(self, "_loop_guard", 0) + 1
+        if loop_guard > 50:
+            raise RuntimeError("循环嵌套过深（>50），疑似死循环")
+        self._loop_guard = loop_guard
+        try:
+            for idx, item in enumerate(raw[:max_iter]):
+                self.variables[item_var] = item
+                self.variables[index_var] = idx
+                # 循环体内遇到 end/stop 作为边界：不终止主流程，取当时输出
+                if body_start:
+                    try:
+                        out = self._execute_node(body_start, _in_loop=True)
+                    except Exception:
+                        raise
+                else:
+                    out = item
+                results.append(out)
+        finally:
+            self._loop_guard = loop_guard - 1
+
+        # 输出：结果数组 + 各变量
+        self.variables[node["id"] + "_results"] = results
+        self.variables[node["id"] + "_output"] = results
+        self._store_output(node["id"], results)
+        return results
 
     def _execute_llm(self, node, config):
         prompt = render_template(config.get("prompt", ""), self.variables)
