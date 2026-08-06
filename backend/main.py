@@ -834,10 +834,10 @@ async def api_kb_upload(file: UploadFile = File(...)):
     # PDF/Word 是二进制格式但有专用解析器，放行；其余二进制（伪装文本）拒绝
     if ext not in ("pdf", "docx") and rag._is_binary(content):
         raise HTTPException(400, f"文件内容是二进制格式（{rag._binary_name(content)}），不是文本文件")
-    doc_id, n = rag.add_document(file.filename, content)
+    doc_id, n, is_dup = rag.add_document(file.filename, content)
     if not doc_id:
         raise HTTPException(400, "文档内容过少，无法建立知识库")
-    return {"id": doc_id, "chunks": n, "name": file.filename}
+    return {"id": doc_id, "chunks": n, "name": file.filename, "duplicate": is_dup}
 
 
 @app.delete("/api/kb/docs/{doc_id}")
@@ -879,6 +879,39 @@ def api_kb_stats():
     total_chunks = sum(d.get("chunks", 0) for d in docs)
     total_size = sum(d.get("size", 0) for d in docs)
     return {"doc_count": len(docs), "chunk_count": total_chunks, "total_size": total_size, "supported": list(rag.TEXT_EXTS.values())}
+
+
+@app.get("/api/kb/export")
+def api_kb_export():
+    """导出全部知识库文档（含分块），返回 JSON 下载"""
+    docs = rag.list_docs()
+    data = []
+    for d in docs:
+        detail = rag.get_doc(d["id"])
+        if not detail:
+            continue
+        data.append({
+            "name": d["name"],
+            "size": d["size"],
+            "created_at": d["created_at"],
+            "type": d.get("type", ""),
+            "chunk_list": detail["chunk_list"],
+        })
+    import json as _json
+    content = _json.dumps({"exported_at": time.time(), "docs": data}, ensure_ascii=False, indent=2)
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="abcode_kb_export.json"'},
+    )
+
+
+@app.post("/api/kb/clear")
+def api_kb_clear():
+    """清空全部知识库"""
+    rag.clear_all()
+    return {"ok": True}
 
 
 # ================= 定时任务 =================

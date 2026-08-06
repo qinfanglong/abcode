@@ -73,7 +73,8 @@ def init_kb():
         size INTEGER,
         chunks INTEGER,
         created_at REAL,
-        ext TEXT DEFAULT ''
+        ext TEXT DEFAULT '',
+        content_hash TEXT DEFAULT ''
     )""")
     conn.execute("""
     CREATE TABLE IF NOT EXISTS kb_chunks (
@@ -92,6 +93,8 @@ def init_kb():
         cols = [r[1] for r in conn.execute("PRAGMA table_info(kb_docs)").fetchall()]
         if "ext" not in cols:
             conn.execute("ALTER TABLE kb_docs ADD COLUMN ext TEXT DEFAULT ''")
+        if "content_hash" not in cols:
+            conn.execute("ALTER TABLE kb_docs ADD COLUMN content_hash TEXT DEFAULT ''")
     except Exception:
         pass
     conn.commit()
@@ -297,16 +300,31 @@ def add_document(filename: str, content: bytes):
     chunks = _chunk_text(text, ext=ext)
     if not chunks:
         return None, 0
-    doc_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:12]
+    content_hash = hashlib.md5(content).hexdigest()
+    # 去重检测：内容相同的文档返回重复标志
     conn = get_conn()
-    conn.execute("INSERT INTO kb_docs (id,name,size,chunks,created_at,ext) VALUES (?,?,?,?,?,?)",
-                 (doc_id, filename, len(content), len(chunks), time.time(), ext))
+    dup = conn.execute("SELECT id, name FROM kb_docs WHERE content_hash=?", (content_hash,)).fetchone()
+    if dup:
+        conn.close()
+        return dup["id"], len(chunks), True
+    doc_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:12]
+    conn.execute("INSERT INTO kb_docs (id,name,size,chunks,created_at,ext,content_hash) VALUES (?,?,?,?,?,?,?)",
+                 (doc_id, filename, len(content), len(chunks), time.time(), ext, content_hash))
     for i, c in enumerate(chunks):
         conn.execute("INSERT INTO kb_chunks (id,doc_id,content,idx) VALUES (?,?,?,?)",
                      (f"{doc_id}_{i}", doc_id, c, i))
     conn.commit()
     conn.close()
-    return doc_id, len(chunks)
+    return doc_id, len(chunks), False
+
+
+def find_duplicate(content: bytes):
+    """检查内容是否已存在，返回 (doc_id, name) 或 None"""
+    content_hash = hashlib.md5(content).hexdigest()
+    conn = get_conn()
+    row = conn.execute("SELECT id, name FROM kb_docs WHERE content_hash=?", (content_hash,)).fetchone()
+    conn.close()
+    return (row["id"], row["name"]) if row else None
 
 
 def list_docs():
@@ -325,6 +343,15 @@ def delete_doc(doc_id):
     conn = get_conn()
     conn.execute("DELETE FROM kb_chunks WHERE doc_id=?", (doc_id,))
     conn.execute("DELETE FROM kb_docs WHERE id=?", (doc_id,))
+    conn.commit()
+    conn.close()
+
+
+def clear_all():
+    """清空全部知识库文档"""
+    conn = get_conn()
+    conn.execute("DELETE FROM kb_chunks")
+    conn.execute("DELETE FROM kb_docs")
     conn.commit()
     conn.close()
 

@@ -1295,16 +1295,33 @@ async function loadKbDocs() {
     api("/api/kb/docs"),
     api("/api/kb/stats").catch(() => null),
   ]);
-  const list = $("#kb-doc-list");
-  list.innerHTML = "";
+  window._kbAllDocs = docs || [];
   if (stats) {
     $("#kb-stats").style.display = "flex";
     $("#kb-stat-docs").textContent = stats.doc_count;
     $("#kb-stat-chunks").textContent = stats.chunk_count;
     $("#kb-stat-size").textContent = (stats.total_size / 1024).toFixed(1) + " KB";
   }
+  const filterInput = $("#kb-doc-filter-input");
+  if (filterInput) filterInput.value = "";
+  renderKbDocs(window._kbAllDocs);
+}
+
+function filterKbDocs() {
+  const kw = ($("#kb-doc-filter-input").value || "").trim().toLowerCase();
+  const docs = (window._kbAllDocs || []).filter(
+    (d) => !kw || d.name.toLowerCase().includes(kw)
+  );
+  renderKbDocs(docs);
+}
+
+function renderKbDocs(docs) {
+  const list = $("#kb-doc-list");
+  list.innerHTML = "";
   if (!docs.length) {
-    list.innerHTML = '<p class="hint">知识库为空，上传文档后开始构建。</p>';
+    list.innerHTML = (window._kbAllDocs && window._kbAllDocs.length)
+      ? '<p class="hint">没有匹配的文档。</p>'
+      : '<p class="hint">知识库为空，上传文档后开始构建。</p>';
     return;
   }
   docs.forEach((d) => {
@@ -1348,13 +1365,17 @@ async function uploadKb() {
   const input = $("#kb-file");
   if (!input.files.length) { alert("请选择文件"); return; }
   const files = [...input.files];
-  let ok = 0, fail = 0, fails = [];
+  let ok = 0, fail = 0, dups = 0, fails = [];
   for (const f of files) {
     const fd = new FormData();
     fd.append("file", f);
     try {
       const resp = await fetch("/api/kb/upload", { method: "POST", body: fd });
-      if (resp.ok) ok++;
+      if (resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        if (data.duplicate) dups++;
+        else ok++;
+      }
       else {
         fail++;
         const err = await resp.json().catch(() => ({}));
@@ -1362,8 +1383,23 @@ async function uploadKb() {
       }
     } catch (e) { fail++; fails.push(`${f.name}: ${e.message}`); }
   }
-  alert(`上传完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个\n${fails.join("\n")}` : ""}`);
+  const parts = [];
+  if (ok) parts.push(`成功 ${ok} 个`);
+  if (dups) parts.push(`重复跳过 ${dups} 个`);
+  if (fail) parts.push(`失败 ${fail} 个`);
+  alert(`上传完成：${parts.join("，") || "无变化"}${fails.length ? `\n${fails.join("\n")}` : ""}`);
   input.value = "";
+  loadKbDocs();
+}
+
+function exportKb() {
+  window.location.href = "/api/kb/export";
+}
+
+async function clearKb() {
+  if (!confirm("确定清空全部知识库？此操作不可恢复！")) return;
+  if (!confirm("再次确认：将删除所有文档和索引。")) return;
+  await api("/api/kb/clear", { method: "POST" });
   loadKbDocs();
 }
 

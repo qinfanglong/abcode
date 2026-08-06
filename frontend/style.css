@@ -87,7 +87,13 @@
 [data-theme="dark"] .add-form { background: #27272a; }
 [data-theme="dark"] .add-form input, [data-theme="dark"] .add-form select { background: #1a1a1f; border-color: #3f3f46; color: #e4e4e7; }
 [data-theme="dark"] .cron-job { background: #1a1a1f; border-color: #27272a; }
-[data-theme="dark"] .kb-doc { background: #1a1a1f; border-color: #27272a; }
+[data-theme="dark"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: #1a1a1f; border-color: #27272a; }
 
 /* ===== 护眼主题（暖色调） ===== */
 [data-theme="sepia"] {
@@ -135,7 +141,13 @@
 [data-theme="sepia"] .add-form { background: #eee5d3; }
 [data-theme="sepia"] .add-form input, [data-theme="sepia"] .add-form select { background: #f5f0e8; border-color: #d4c9b8; color: #3e3428; }
 [data-theme="sepia"] .cron-job { background: #ede7db; border-color: #d4c9b8; }
-[data-theme="sepia"] .kb-doc { background: #ede7db; border-color: #d4c9b8; }
+[data-theme="sepia"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: #ede7db; border-color: #d4c9b8; }
 [data-theme="sepia"] .mode-popup { background: #f5f0e8; border-color: #d4c9b8; }
 [data-theme="sepia"] .mode-popup-header { border-color: #d4c9b8; }
 [data-theme="sepia"] .mode-option:hover { background: #ede7db; }
@@ -209,7 +221,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="minimal"] .add-form { background: #ffffff; }
 [data-theme="minimal"] .add-form input, [data-theme="minimal"] .add-form select { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
 [data-theme="minimal"] .cron-job { background: #ffffff; border-color: #e2e3e9; }
-[data-theme="minimal"] .kb-doc { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: #ffffff; border-color: #e2e3e9; }
 [data-theme="minimal"] .welcome-logo { background: linear-gradient(135deg, #6b7280, #52525b); }
 [data-theme="minimal"] .msg.assistant .avatar { background: linear-gradient(135deg, #6b7280, #52525b); }
 [data-theme="minimal"] .msg.user .avatar { background: #e0e0e6; color: #4a4a55; }
@@ -278,7 +296,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="ocean"] .add-form { background: #ffffff; }
 [data-theme="ocean"] .add-form input, [data-theme="ocean"] .add-form select { background: #ffffff; border-color: #cfe0ec; color: #24484a; }
 [data-theme="ocean"] .cron-job { background: #ffffff; border-color: #cfe0ec; }
-[data-theme="ocean"] .kb-doc { background: #ffffff; border-color: #cfe0ec; }
+[data-theme="ocean"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: #ffffff; border-color: #cfe0ec; }
 [data-theme="ocean"] .welcome-logo { background: linear-gradient(135deg, #2f78a8, #27a0c4); }
 [data-theme="ocean"] .msg.assistant .avatar { background: linear-gradient(135deg, #2f78a8, #27a0c4); }
 [data-theme="ocean"] .msg.user .avatar { background: #cfe0ec; color: #245166; }
@@ -351,7 +375,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="wave"] .add-form { background: rgba(255, 255, 255, 0.85); }
 [data-theme="wave"] .add-form input, [data-theme="wave"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #c9ddec; color: #2b505d; }
 [data-theme="wave"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #cfe2ee; }
-[data-theme="wave"] .kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #cfe2ee; }
+[data-theme="wave"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #cfe2ee; }
 [data-theme="wave"] .welcome-logo { background: linear-gradient(135deg, #2f7ead, #37b7d0); }
 [data-theme="wave"] .msg.assistant .avatar { background: linear-gradient(135deg, #2f7ead, #37b7d0); }
 [data-theme="wave"] .msg.user .avatar { background: #cfe2ee; color: #245166; }
@@ -420,7 +450,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="oled"] .add-form { background: #0a0b0e; }
 [data-theme="oled"] .add-form input, [data-theme="oled"] .add-form select { background: #0a0b0e; border-color: #242832; color: #c8cdd6; }
 [data-theme="oled"] .cron-job { background: #0a0b0e; border-color: #1c1f26; }
-[data-theme="oled"] .kb-doc { background: #0a0b0e; border-color: #1c1f26; }
+[data-theme="oled"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: #0a0b0e; border-color: #1c1f26; }
 [data-theme="oled"] .welcome-logo { background: linear-gradient(135deg, #8b95a8, #5a6474); }
 [data-theme="oled"] .msg.assistant .avatar { background: linear-gradient(135deg, #8b95a8, #5a6474); }
 [data-theme="oled"] .msg.user .avatar { background: #14171d; color: #9aa3b0; }
@@ -489,7 +525,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="forest"] .add-form { background: #ffffff; }
 [data-theme="forest"] .add-form input, [data-theme="forest"] .add-form select { background: #ffffff; border-color: #d5e2cf; color: #2c3d2e; }
 [data-theme="forest"] .cron-job { background: #ffffff; border-color: #d5e2cf; }
-[data-theme="forest"] .kb-doc { background: #ffffff; border-color: #d5e2cf; }
+[data-theme="forest"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: #ffffff; border-color: #d5e2cf; }
 [data-theme="forest"] .welcome-logo { background: linear-gradient(135deg, #4c7a4f, #6a9b5f); }
 [data-theme="forest"] .msg.assistant .avatar { background: linear-gradient(135deg, #4c7a4f, #6a9b5f); }
 [data-theme="forest"] .msg.user .avatar { background: #d5e2cf; color: #2c3d2e; }
@@ -1643,6 +1685,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   background: var(--bg2, #f8f9fb); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: #6b7280;
 }
 .kb-stats b { color: var(--text); font-size: 14px; }
+.kb-stats-actions { margin-left: auto; display: flex; gap: 6px; }
+.kb-stats-actions .kd-btn {
+  padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; line-height: 1.4;
+}
+.kb-stats-actions .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-stats-actions .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
 .kb-doc {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
@@ -1672,6 +1727,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px; line-height: 1.6; margin: 0; color: var(--text); background: transparent; max-height: 220px; overflow-y: auto;
 }
+.kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
 .kb-doc {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
@@ -2700,7 +2761,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="cartoon"] .add-form { background: rgba(255, 255, 255, 0.85); }
 [data-theme="cartoon"] .add-form input, [data-theme="cartoon"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #d5e8cf; color: #33424f; }
 [data-theme="cartoon"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #d5e8cf; }
-[data-theme="cartoon"] .kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #d5e8cf; }
+[data-theme="cartoon"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #d5e8cf; }
 [data-theme="cartoon"] .mode-popup { background: rgba(255, 255, 255, 0.92); border-color: #d5e8cf; }
 [data-theme="cartoon"] .mode-popup-header { border-color: #d5e8cf; }
 [data-theme="cartoon"] .mode-option:hover { background: rgba(230, 245, 220, 0.9); }
@@ -2783,7 +2850,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="particles"] .add-form { background: rgba(24, 27, 56, 0.8); }
 [data-theme="particles"] .add-form input, [data-theme="particles"] .add-form select { background: rgba(22, 27, 52, 0.85); border-color: #2a3158; color: #e6e9f5; }
 [data-theme="particles"] .cron-job { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
-[data-theme="particles"] .kb-doc { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
 [data-theme="particles"] .welcome-logo { background: linear-gradient(135deg, #7b8cff, #4f6ef7); }
 [data-theme="particles"] .msg.assistant .avatar { background: linear-gradient(135deg, #7b8cff, #8b5cf6); }
 [data-theme="particles"] .msg.user .avatar { background: #39426f; color: #cfe0ff; }
@@ -2879,7 +2952,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 [data-theme="particles-light"] .add-form { background: rgba(255, 255, 255, 0.85); }
 [data-theme="particles-light"] .add-form input, [data-theme="particles-light"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
 [data-theme="particles-light"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
-[data-theme="particles-light"] .kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
+[data-theme="particles-light"] .kb-doc-filter { margin-bottom: 10px; }
+.kb-doc-filter input {
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; background: white; outline: none;
+}
+.kb-doc-filter input:focus { border-color: #2563eb; }
+.kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
 [data-theme="particles-light"] .welcome-logo { background: linear-gradient(135deg, #5a7bff, #8b5cf6); }
 [data-theme="particles-light"] .msg.assistant .avatar { background: linear-gradient(135deg, #5a7bff, #8b5cf6); }
 [data-theme="particles-light"] .msg.user .avatar { background: #dbe4ff; color: #3a4f8f; }

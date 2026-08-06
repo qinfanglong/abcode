@@ -861,6 +861,10 @@
         <span>📄 文档 <b id="kb-stat-docs">0</b></span>
         <span>🧩 分块 <b id="kb-stat-chunks">0</b></span>
         <span>💾 大小 <b id="kb-stat-size">0 KB</b></span>
+        <span class="kb-stats-actions">
+          <button class="kd-btn" title="导出全部文档(JSON备份)" onclick="exportKb()">⬇ 导出</button>
+          <button class="kd-btn kd-del" title="清空知识库" onclick="clearKb()">🗑 清空</button>
+        </span>
       </div>
       <div class="kb-upload" id="kb-dropzone">
         <input type="file" id="kb-file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.py,.js,.ts,.html,.css,.yaml,.yml,.xml,.ini,.conf,.sh,.sql,.c,.cpp,.h,.java,.go,.rs,.php,.rb,.vue,.jsx,.tsx,.toml,.rst,.tex,.pdf,.docx">
@@ -872,6 +876,9 @@
         <button class="btn-save" onclick="kbTestSearch()">搜索测试</button>
       </div>
       <div id="kb-test-results" style="display:none"></div>
+      <div class="kb-doc-filter">
+        <input id="kb-doc-filter-input" placeholder="🔍 按名称过滤文档..." oninput="filterKbDocs()">
+      </div>
       <div id="kb-doc-list"></div>
     </div>
   </div>
