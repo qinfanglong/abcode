@@ -1252,6 +1252,7 @@ async function testSearchService() {
 function openKb() {
   $("#kb-modal").style.display = "flex";
   loadKbDocs();
+  setupKbDropzone();
 }
 
 function closeKb() {
@@ -1364,6 +1365,61 @@ async function uploadKb() {
   alert(`上传完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个\n${fails.join("\n")}` : ""}`);
   input.value = "";
   loadKbDocs();
+}
+
+function setupKbDropzone() {
+  const dz = $("#kb-dropzone");
+  const fileInput = $("#kb-file");
+  if (!dz || !fileInput) return;
+  ["dragenter", "dragover"].forEach((ev) => {
+    dz.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dz.classList.add("kb-dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((ev) => {
+    dz.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dz.classList.remove("kb-dragover");
+    });
+  });
+  dz.addEventListener("drop", (e) => {
+    const files = e.dataTransfer.files;
+    if (!files || !files.length) return;
+    fileInput.files = files;
+    uploadKb();
+  });
+}
+
+async function kbTestSearch() {
+  const q = $("#kb-test-input").value.trim();
+  const box = $("#kb-test-results");
+  if (!q) { box.style.display = "none"; return; }
+  box.style.display = "block";
+  box.innerHTML = '<p class="hint">搜索中...</p>';
+  try {
+    const results = await api("/api/kb/search", {
+      method: "POST",
+      body: JSON.stringify({ query: q, top_k: 5, highlight: true }),
+    });
+    if (!results.length) {
+      box.innerHTML = '<p class="hint">未找到相关内容，试试更具体的关键词</p>';
+      return;
+    }
+    let html = `<div class="kb-test-head">找到 ${results.length} 条相关片段</div>`;
+    results.forEach((r) => {
+      const shown = (r.highlight || r.content).slice(0, 300);
+      html += `<div class="kb-test-item">
+        <div class="kti-doc">📄 ${esc(r.doc_name)} <span class="kb-type-tag">${esc(r.doc_type || "文档")}</span> <span class="kti-score">相关度 ${r.score}</span></div>
+        <div class="kti-content">${shown}</div>
+      </div>`;
+    });
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = `<p class="hint">搜索失败: ${e.message}</p>`;
+  }
 }
 
 async function deleteKbDoc(id) {

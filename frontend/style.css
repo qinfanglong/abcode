@@ -729,12 +729,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 }
 .mode-selector-btn:hover { background: #f3f4f6; }
 .mode-selector-btn svg { width: 10px; height: 10px; color: #9ca3af; }
-.loading-indicator {
-  display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px;
-}
-.loading-indicator svg { animation: spin 1s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .close-mode-btn {
   display: flex; align-items: center; gap: 6px; padding: 6px 12px;
   border: 1px solid #e5e7eb; border-radius: 8px; background: white;
@@ -766,6 +760,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 }
 #mode-popup { left: 20px; }
 #close-mode-popup { right: 20px; }
+#emoji-popup { left: 150px; }
+.emoji-popup {
+  position: absolute; bottom: 100%; margin-bottom: 8px;
+  width: 300px; background: white; border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  z-index: 210; overflow: hidden;
+}
+.emoji-popup-header {
+  padding: 10px 14px 8px; font-size: 12px; font-weight: 600;
+  color: var(--text-muted); border-bottom: 1px solid var(--border);
+}
+.emoji-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr);
+  gap: 2px; padding: 8px; max-height: 200px; overflow-y: auto;
+}
+.emoji-grid button {
+  border: none; background: transparent; font-size: 20px;
+  padding: 4px; border-radius: 6px; cursor: pointer; line-height: 1.2;
+  transition: background 0.12s, transform 0.12s;
+}
+.emoji-grid button:hover { background: var(--input-bg); transform: scale(1.15); }
+.wf-test-file-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 8px; font-size: 12px;
+  background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb;
+}
+.wf-test-file-x {
+  cursor: pointer; color: #9ca3af; font-size: 11px; font-weight: 600;
+}
+.wf-test-file-x:hover { color: #ef4444; }
+[data-theme="dark"] .emoji-popup { background: #1a1a1f; border-color: #27272a; }
+[data-theme="sepia"] .emoji-popup { background: #f5f0e8; border-color: #d4c9b8; }
+[data-theme="oled"] .emoji-popup { background: #0a0b0e; border-color: #1c1f26; }
+[data-theme="cartoon"] .emoji-popup { background: #fffdf5; border-color: #d5e8cf; }
 .mode-popup-header {
   display: flex; justify-content: space-between; align-items: flex-start;
   padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
@@ -1584,8 +1612,32 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 /* ===== 知识库 ===== */
 .kb-content { width: 620px; }
 .kb-upload { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.kb-upload.kb-dragover {
+  border: 2px dashed #2563eb; background: rgba(37, 99, 235, 0.05); border-radius: 10px;
+}
 .kb-upload input[type=file] { font-size: 12px; flex: 1; min-width: 200px; }
 .kb-upload .btn-save { flex: 0 0 auto; padding: 8px 18px; }
+.kb-test-search { display: flex; gap: 8px; margin-bottom: 12px; }
+.kb-test-search input {
+  flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; outline: none; background: transparent; color: var(--text); font-family: inherit;
+}
+.kb-test-search input:focus { border-color: var(--primary); }
+.kb-test-search .btn-save { flex: 0 0 auto; }
+#kb-test-results {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+  background: var(--bg2, #f8f9fb); max-height: 280px; overflow-y: auto;
+}
+.kb-test-head { font-size: 12px; font-weight: 600; color: #2563eb; margin-bottom: 8px; }
+.kb-test-item {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; background: white;
+}
+.kb-test-item .kti-doc { font-size: 12px; font-weight: 600; color: var(--primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kb-test-item .kti-score { margin-left: auto; font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.kb-test-item .kti-content { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.kb-test-item .kti-content mark {
+  background: rgba(255, 200, 0, 0.35); color: inherit; border-radius: 2px; padding: 0 1px;
+}
 .kb-stats {
   display: flex; gap: 20px; padding: 10px 14px; margin-bottom: 12px;
   background: var(--bg2, #f8f9fb); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: #6b7280;
@@ -2132,37 +2184,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   margin-top: 3px;
 }
 .queue-del:hover { background: #fee2e2; color: #ef4444; }
-
-/* 发送选择浮层（排队 / 抢断） */
-.send-choice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card-bg);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
-  margin-bottom: 6px;
-  animation: queue-in 0.2s ease;
-}
-.send-choice-tip { font-size: 12px; color: var(--text-secondary); }
-.send-choice-btns { display: flex; align-items: center; gap: 6px; }
-.send-choice-btns button {
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: white;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.send-choice-btns button:hover { border-color: var(--primary); color: var(--primary); }
-.send-choice-btns #sc-preempt-btn { border-color: #f59e0b; color: #b45309; }
-.send-choice-btns #sc-preempt-btn:hover { background: #fffbeb; }
-.send-choice-btns #sc-cancel-btn { border: none; background: transparent; padding: 5px 6px; }
 
 /* 图标按钮 */
 .icon-btn {

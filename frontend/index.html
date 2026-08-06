@@ -862,11 +862,16 @@
         <span>🧩 分块 <b id="kb-stat-chunks">0</b></span>
         <span>💾 大小 <b id="kb-stat-size">0 KB</b></span>
       </div>
-      <div class="kb-upload">
+      <div class="kb-upload" id="kb-dropzone">
         <input type="file" id="kb-file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.py,.js,.ts,.html,.css,.yaml,.yml,.xml,.ini,.conf,.sh,.sql,.c,.cpp,.h,.java,.go,.rs,.php,.rb,.vue,.jsx,.tsx,.toml,.rst,.tex,.pdf,.docx">
         <button class="btn-save" onclick="uploadKb()">上传文档</button>
-        <p class="hint" style="margin-top:8px">支持 30+ 种文本格式及 PDF/Word（≤10MB）。上传后自动分块索引，提问时用 BM25 算法自动检索相关内容。</p>
+        <p class="hint" style="margin-top:8px">支持 30+ 种文本格式及 PDF/Word（≤10MB），可拖拽文件到此处。上传后自动分块索引，提问时用 BM25 算法自动检索相关内容。</p>
       </div>
+      <div class="kb-test-search">
+        <input id="kb-test-input" placeholder="输入关键词测试检索效果..." onkeydown="if(event.key==='Enter')kbTestSearch()">
+        <button class="btn-save" onclick="kbTestSearch()">搜索测试</button>
+      </div>
+      <div id="kb-test-results" style="display:none"></div>
       <div id="kb-doc-list"></div>
     </div>
   </div>
