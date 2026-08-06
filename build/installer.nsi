@@ -1,10 +1,14 @@
 ; ABcode Windows Installer Script (NSIS)
-; Compile with: makensis installer.nsi
+; Compile with: makensis /DVERSION="0.4.0" installer.nsi
 
 !define APP_NAME "ABcode"
-!define APP_VERSION "0.4.0"
+!ifndef VERSION
+  !define APP_VERSION "0.4.0"
+!else
+  !define APP_VERSION "${VERSION}"
+!endif
 !define APP_PUBLISHER "ABcode Team"
-!define APP_URL "https://github.com/511127068/ABcode"
+!define APP_URL "https://github.com/qinfanglong/abcode"
 !define APP_EXE "ABcode.exe"
 
 !include "MUI2.nsh"

@@ -1,6 +1,6 @@
 @echo off
 rem ABcode Windows 打包脚本
-rem 使用 PyInstaller 打包成 .exe
+rem 使用 PyInstaller 打包成 .exe，可选 NSIS 制作安装包
 
 echo [ABcode] 开始 Windows 打包...
 
@@ -33,6 +33,22 @@ echo [ABcode] 打包后端...
 rem 复制启动脚本
 echo [ABcode] 复制启动脚本...
 copy start.bat dist\start.bat
+
+rem 如果有 NSIS，制作安装包
+where makensis >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [ABcode] 发现 NSIS，制作安装包...
+    copy build\start_windows.bat dist\
+    copy build\icon.ico dist\
+    mkdir dist\build 2>nul
+    copy build\icon.ico dist\build\
+    copy build\banner.bmp dist\build\
+    makensis /DVERSION="0.4.0" build\installer.nsi
+    echo [ABcode] 安装包生成: dist\ABcode-Setup-0.4.0.exe
+) else (
+    echo [ABcode] 未安装 NSIS，跳过安装包制作
+    echo [ABcode] 如需安装包，请安装 NSIS: https://nsis.sourceforge.io/Download
+)
 
 echo [ABcode] 打包完成！文件在 dist\ 目录
 echo [ABcode] 运行 dist\ABcode.exe 即可启动

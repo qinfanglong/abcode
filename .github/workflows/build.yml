@@ -60,6 +60,8 @@ jobs:
           choco install nsis -y --no-progress
       - name: 构建 Windows .exe 和安装包
         shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
           # Build executable with PyInstaller
           python -m PyInstaller \
@@ -74,15 +76,17 @@ jobs:
             --hidden-import=sqlite3 \
             backend/main.py
 
-          # Copy start script and resources
+          # Copy resources for installer
           cp build/start_windows.bat dist/
           cp build/icon.ico dist/
           mkdir -p dist/build
           cp build/icon.ico dist/build/
           cp build/banner.bmp dist/build/
 
-          # Create installer with NSIS
-          /c/Program\ Files\ \(x86\)/NSIS/makensis.exe build/installer.nsi
+          # Create installer with NSIS (pass version from tag)
+          /c/Program\ Files\ \(x86\)/NSIS/makensis.exe \
+            /DVERSION="${VERSION#v}" \
+            build/installer.nsi
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
