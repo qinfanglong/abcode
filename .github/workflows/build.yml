@@ -54,25 +54,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: 安装 PyInstaller 和 NSIS
+      - name: 安装 PyInstaller
         run: |
           python -m pip install pyinstaller --quiet
-          choco install nsis -y --no-progress
-      - name: 构建 Windows .exe 和安装包
+      - name: 构建 Windows 便携包
         shell: powershell
         env:
           VERSION: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = "Stop"
-          
-          # Verify NSIS is in PATH
-          Write-Host "Checking NSIS in PATH..."
-          $nsisCmd = "makensis"
-          if (-not (Get-Command $nsisCmd -ErrorAction SilentlyContinue)) {
-            Write-Error "makensis not found in PATH after choco install"
-            exit 1
-          }
-          Write-Host "NSIS found in PATH"
           
           # Build executable with PyInstaller
           Write-Host "Building with PyInstaller..."
@@ -95,32 +85,34 @@ jobs:
           }
           Write-Host "PyInstaller success: dist/ABcode.exe created"
           
-          # Copy resources for installer
-          Write-Host "Copying installer resources..."
-          Copy-Item build/start_windows.bat dist/ -Force
-          Copy-Item build/icon.ico dist/ -Force
-          New-Item -ItemType Directory -Force -Path dist/build | Out-Null
-          Copy-Item build/icon.ico dist/build/ -Force
-          Copy-Item build/banner.bmp dist/build/ -Force
-          
-          # Create installer with NSIS (pass version from tag)
+          # Create portable package (zip)
           $version = $env:VERSION.TrimStart('v')
-          Write-Host "Creating installer with NSIS version: $version"
-          & $nsisCmd /DVERSION="$version" build/installer.nsi
+          $zipName = "ABcode-windows-${version}.zip"
+          Write-Host "Creating portable package: $zipName"
           
-          # Verify installer was created
-          $installer = Get-ChildItem dist/ABcode-Setup-*.exe -ErrorAction SilentlyContinue
-          if ($installer) {
-            Write-Host "Installer created: $($installer.FullName) ($($installer.Length) bytes)"
-          } else {
-            Write-Error "Installer not found in dist/"
-            Get-ChildItem dist/
-            exit 1
-          }
+          # Copy necessary files to a staging directory
+          $staging = "dist_portable"
+          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          
+          Copy-Item dist/ABcode.exe $staging/
+          Copy-Item -Recurse frontend $staging/
+          Copy-Item -Recurse backend $staging/
+          Copy-Item backend/requirements.txt $staging/
+          Copy-Item build/icon.ico $staging/
+          Copy-Item build/start_windows.bat $staging/
+          
+          # Create zip
+          Compress-Archive -Path "$staging/*" -DestinationPath "dist/$zipName" -Force
+          Write-Host "Portable package created: dist/$zipName"
+          
+          # Verify
+          $zipFile = Get-Item "dist/$zipName"
+          Write-Host "Package size: $($zipFile.Length) bytes"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist/ABcode-Setup-*.exe
+          path: dist/ABcode-windows-*.zip
           if-no-files-found: ignore
 
   release:
