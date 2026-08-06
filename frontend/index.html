@@ -375,6 +375,7 @@
           <div style="display:flex; gap:6px;">
             <button class="wf-view-btn active" data-view="list" onclick="switchWfView('list')">列表</button>
             <button class="wf-view-btn" data-view="executions" onclick="switchWfView('executions')">执行记录</button>
+            <button class="wf-view-btn" onclick="loadWorkflowExecutions()">🔄</button>
           </div>
         </div>
         <div id="wf-list-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
@@ -501,67 +502,6 @@
         <button class="btn-test" onclick="closeNodeConfigModal()">取消</button>
         <button class="btn-save" onclick="closeNodeConfigModal()">完成</button>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- 工作流测试弹窗 -->
-<div id="wf-test-modal" class="modal" style="display:none">
-  <div class="modal-content" style="width:720px; max-height:90vh;">
-    <div class="modal-header">
-      <h2>🧪 测试工作流</h2>
-      <button class="modal-close" onclick="closeWfTestModal()">✕</button>
-    </div>
-    <div class="modal-body" style="max-height:calc(90vh - 130px); overflow-y:auto;">
-      <div class="ncf-section">
-        <div class="ncf-group-title">输入参数</div>
-        <div id="wf-test-input-fields"></div>
-        <div class="ncf-row">
-          <label class="ncf-label">附件（可选）</label>
-          <div id="wf-test-file-drop" style="border:2px dashed var(--border); border-radius:10px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--input-bg);"
-               onclick="$('#wf-test-file-input').click()"
-               ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'"
-               ondragleave="this.style.borderColor='var(--border)'"
-               ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; handleWfTestFiles(event.dataTransfer.files)">
-            <div style="font-size:28px; margin-bottom:6px;">📎</div>
-            <div style="font-size:13px; color:var(--text-secondary);">拖拽文件到此处，或 <span style="color:var(--primary); font-weight:600;">点击选择</span></div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">支持 txt / pdf / docx / md / json / csv / 图片</div>
-          </div>
-          <input type="file" id="wf-test-file-input" multiple accept=".txt,.pdf,.docx,.md,.json,.csv,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="handleWfTestFiles(this.files)">
-          <div id="wf-test-file-list" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
-        </div>
-      </div>
-      <div class="ncf-section">
-        <div class="ncf-group-title">快捷操作</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn-test" onclick="loadWfTestPreset('hello')" style="font-size:12px;">👋 Hello</button>
-          <button class="btn-test" onclick="loadWfTestPreset('json')" style="font-size:12px;">📋 JSON</button>
-          <button class="btn-test" onclick="loadWfTestPreset('empty')" style="font-size:12px;">🗑 清空</button>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer" style="display:flex; justify-content:space-between; padding:12px 20px; border-top:1px solid var(--border);">
-      <div style="font-size:12px; color:var(--text-muted);" id="wf-test-status">就绪</div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-test" onclick="closeWfTestModal()">取消</button>
-        <button class="btn-save" id="wf-test-run-btn" onclick="executeWfTest()">▶ 运行测试</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 测试结果弹窗 -->
-<div id="wf-result-modal" class="modal" style="display:none">
-  <div class="modal-content" style="width:700px; max-height:85vh;">
-    <div class="modal-header">
-      <h2 id="wf-result-title">📊 测试结果</h2>
-      <button class="modal-close" onclick="closeModal('wf-result-modal')">✕</button>
-    </div>
-    <div class="modal-body" style="max-height:calc(85vh - 100px); overflow-y:auto;">
-      <div id="wf-result-content"></div>
-    </div>
-    <div class="modal-footer" style="display:flex; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--border);">
-      <button class="btn-test" onclick="closeModal('wf-result-modal')">关闭</button>
     </div>
   </div>
 </div>
@@ -745,6 +685,8 @@
               </select>
             </div>
           </div>
+          <div id="settings-lang-hint" style="display:none; font-size:11px; color:var(--primary); margin-top:6px;"></div>
+          <div id="settings-tz-hint" style="display:none; font-size:11px; color:var(--primary); margin-top:6px;"></div>
         </div>
 
         <div class="pref-actions">
@@ -926,13 +868,43 @@
       <button class="modal-close" onclick="closeKb()">✕</button>
     </div>
     <div class="modal-body">
+      <div class="kb-stats" id="kb-stats" style="display:none">
+        <span>📄 文档 <b id="kb-stat-docs">0</b></span>
+        <span>🧩 分块 <b id="kb-stat-chunks">0</b></span>
+        <span>💾 大小 <b id="kb-stat-size">0 KB</b></span>
+      </div>
       <div class="kb-upload">
-        <input type="file" id="kb-file" multiple accept=".txt,.md,.csv,.json,.log,.py,.js,.html,.css">
+        <input type="file" id="kb-file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.py,.js,.ts,.html,.css,.yaml,.yml,.xml,.ini,.conf,.sh,.sql,.c,.cpp,.h,.java,.go,.rs,.php,.rb,.vue,.jsx,.tsx,.toml,.rst,.tex">
         <button class="btn-save" onclick="uploadKb()">上传文档</button>
-        <p class="hint" style="margin-top:8px">支持 txt/md/csv/json/代码等文本文件（≤10MB）。上传后自动分块索引，提问时会自动检索相关内容。</p>
+        <p class="hint" style="margin-top:8px">支持 txt/md/csv/json/代码等 30+ 种文本格式（≤10MB）。上传后自动分块索引，提问时用 BM25 算法自动检索相关内容。</p>
       </div>
       <div id="kb-doc-list"></div>
     </div>
+  </div>
+</div>
+
+<!-- 知识库文档详情弹窗 -->
+<div id="kb-detail-modal" class="modal" style="display:none">
+  <div class="modal-content kb-detail-content">
+    <div class="modal-header">
+      <h2 id="kb-detail-title">📄 文档详情</h2>
+      <button class="modal-close" onclick="closeKbDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="kb-detail-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库快捷引用面板（Ctrl+K / 输入栏 📚 触发） -->
+<div id="kb-ref-panel" class="kb-ref-panel" style="display:none">
+  <div class="kb-ref-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input id="kb-ref-input" placeholder="搜索知识库，点击结果插入引用..." autocomplete="off">
+    <button id="kb-ref-close" class="kb-ref-close">✕</button>
+  </div>
+  <div id="kb-ref-results" class="kb-ref-results">
+    <div class="kb-ref-empty">输入关键词搜索知识库</div>
   </div>
 </div>
 

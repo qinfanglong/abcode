@@ -842,7 +842,35 @@ def api_kb_delete(doc_id: str):
 def api_kb_search(body: dict):
     query = body.get("query", "")
     top_k = int(body.get("top_k", 5))
+    highlight = bool(body.get("highlight", False))
+    if highlight:
+        return rag.search_with_highlight(query, top_k)
     return rag.search(query, top_k)
+
+
+@app.get("/api/kb/docs/{doc_id}")
+def api_kb_doc_detail(doc_id: str):
+    doc = rag.get_doc(doc_id)
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    return doc
+
+
+@app.post("/api/kb/docs/{doc_id}/rename")
+def api_kb_doc_rename(doc_id: str, body: dict):
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(400, "名称不能为空")
+    rag.rename_doc(doc_id, new_name)
+    return {"ok": True, "name": new_name}
+
+
+@app.get("/api/kb/stats")
+def api_kb_stats():
+    docs = rag.list_docs()
+    total_chunks = sum(d.get("chunks", 0) for d in docs)
+    total_size = sum(d.get("size", 0) for d in docs)
+    return {"doc_count": len(docs), "chunk_count": total_chunks, "total_size": total_size, "supported": list(rag.TEXT_EXTS.values())}
 
 
 # ================= 定时任务 =================

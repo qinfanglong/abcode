@@ -1262,6 +1262,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 .wf-status-ok { color: #16a34a; font-weight: 600; }
 .wf-status-fail { color: #dc2626; font-weight: 600; }
 .wf-status-none { color: var(--text-muted); }
+.wf-status-muted { color: var(--text-muted); font-size: 11px; }
+.wf-card-btn {
+  background: var(--card-bg); border: 1px solid var(--border); color: var(--text-secondary);
+  border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; transition: all .15s;
+}
+.wf-card-btn:hover { border-color: var(--primary); color: var(--primary); }
+.wf-exec-detail {
+  margin: -6px 0 10px; padding: 10px 12px; background: var(--msg-assistant-bg);
+  border: 1px solid var(--border); border-radius: 8px; font-size: 12px;
+}
 
 /* 分页 */
 .wf-pagination {
@@ -1572,21 +1582,49 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 .switch-label input { accent-color: var(--primary); cursor: pointer; }
 
 /* ===== 知识库 ===== */
-.kb-content { width: 560px; }
+.kb-content { width: 620px; }
 .kb-upload { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .kb-upload input[type=file] { font-size: 12px; flex: 1; min-width: 200px; }
 .kb-upload .btn-save { flex: 0 0 auto; padding: 8px 18px; }
+.kb-stats {
+  display: flex; gap: 20px; padding: 10px 14px; margin-bottom: 12px;
+  background: var(--bg2, #f8f9fb); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: #6b7280;
+}
+.kb-stats b { color: var(--text); font-size: 14px; }
+.kb-doc {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
+}
+.kb-doc .kd-main { flex: 1; min-width: 0; }
+.kb-doc .kd-name { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kb-doc .kd-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.kb-doc .kd-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.kb-doc .kd-btn {
+  padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: white; font-size: 12px; cursor: pointer; color: #6b7280; line-height: 1.2;
+}
+.kb-doc .kd-btn:hover { color: #2563eb; border-color: #2563eb; }
+.kb-doc .kd-btn.kd-del:hover { color: #ef4444; border-color: #ef4444; }
+.kb-type-tag {
+  display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+  background: rgba(37, 99, 235, 0.1); color: #2563eb; font-weight: 500; line-height: 1.5;
+}
+.kb-detail-content { width: 700px; max-width: 92vw; }
+.kb-detail-meta { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #6b7280; margin-bottom: 12px; flex-wrap: wrap; }
+.kb-detail-chunks { max-height: 55vh; overflow-y: auto; }
+.kb-detail-chunk {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px;
+}
+.kb-detail-chunk .kdc-head { font-size: 12px; font-weight: 600; color: #2563eb; margin-bottom: 6px; }
+.kb-detail-chunk pre.kdc-content {
+  white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.6; margin: 0; color: var(--text); background: transparent; max-height: 220px; overflow-y: auto;
+}
 .kb-doc {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
 }
 .kb-doc .kd-name { font-weight: 600; font-size: 13px; }
-.kb-doc .kd-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
-.kb-doc button {
-  padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
-  background: white; font-size: 12px; cursor: pointer; color: #6b7280;
-}
-.kb-doc button:hover { color: #ef4444; border-color: #ef4444; }
 
 /* ===== 定时任务 ===== */
 .cron-content { width: 560px; }
@@ -2234,6 +2272,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   padding: 20px;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.kb-ref-result .krr-doc { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kb-ref-result .krr-score {
+  margin-left: auto; font-size: 11px; color: var(--text-muted); font-weight: 400;
+}
+.kb-ref-result .krr-content mark, .kb-detail-chunk mark {
+  background: rgba(255, 200, 0, 0.35); color: inherit; border-radius: 2px; padding: 0 1px;
+}
+[data-theme="dark"] .kb-ref-result .krr-content mark, [data-theme="oled"] .kb-ref-result .krr-content mark {
+  background: rgba(255, 200, 0, 0.28); color: #ffe9a8;
 }
 
 /* 附件预览 */

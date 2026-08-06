@@ -23,10 +23,28 @@ let state = {
   tbSkills: true,
   tbMcp: true,
   tbThinking: false,
+  // 界面偏好（语言/时区）
+  lang: localStorage.getItem("abcode-lang") || "zh-CN",
+  timezone: localStorage.getItem("abcode-timezone") || "",
 };
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
+
+// 统一时间格式化：若设置了时区则按该时区显示
+function fmtTime(ts, withDate = true) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  if (state.timezone) {
+    try {
+      const opts = withDate
+        ? { timeZone: state.timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }
+        : { timeZone: state.timezone, year: "numeric", month: "2-digit", day: "2-digit" };
+      return new Intl.DateTimeFormat("zh-CN", opts).format(d);
+    } catch (e) { /* 无效时区则回退 */ }
+  }
+  return withDate ? d.toLocaleString() : d.toLocaleDateString();
+}
 
 // ===== 初始化 =====
 async function init() {
@@ -262,7 +280,7 @@ async function loadTeamActivity() {
     <div class="team-member-card">
       <div class="team-member-info">
         <div class="team-member-name">${a.user_id} ${a.action} ${a.target_type}</div>
-        <div class="team-member-email">${new Date(a.created_at * 1000).toLocaleString()}</div>
+        <div class="team-member-email">${fmtTime(a.created_at)}</div>
       </div>
     </div>
   `).join('');
@@ -1235,14 +1253,55 @@ function openKb() {
   $("#kb-modal").style.display = "flex";
   loadKbDocs();
 }
+
 function closeKb() {
   $("#kb-modal").style.display = "none";
 }
 
+function openKbDetail(id) {
+  $("#kb-detail-modal").style.display = "flex";
+  $("#kb-detail-title").textContent = "📄 加载中...";
+  $("#kb-detail-body").innerHTML = '<p class="hint">加载中...</p>';
+  api(`/api/kb/docs/${id}`).then((d) => {
+    $("#kb-detail-title").textContent = `📄 ${d.name}`;
+    const t = fmtTime(d.created_at);
+    let html = `<div class="kb-detail-meta">
+      <span class="kb-type-tag">${esc(d.type)}</span>
+      <span>${d.chunks} 分块</span>
+      <span>${(d.size / 1024).toFixed(1)} KB</span>
+      <span>${t}</span>
+    </div>`;
+    html += `<div class="kb-detail-chunks">`;
+    d.chunk_list.forEach((c) => {
+      html += `<div class="kb-detail-chunk">
+        <div class="kdc-head">分块 #${c.idx + 1}</div>
+        <pre class="kdc-content">${esc(c.content)}</pre>
+      </div>`;
+    });
+    html += `</div>`;
+    $("#kb-detail-body").innerHTML = html;
+  }).catch((e) => {
+    $("#kb-detail-body").innerHTML = `<p class="hint">加载失败: ${e.message}</p>`;
+  });
+}
+
+function closeKbDetail() {
+  $("#kb-detail-modal").style.display = "none";
+}
+
 async function loadKbDocs() {
-  const docs = await api("/api/kb/docs");
+  const [docs, stats] = await Promise.all([
+    api("/api/kb/docs"),
+    api("/api/kb/stats").catch(() => null),
+  ]);
   const list = $("#kb-doc-list");
   list.innerHTML = "";
+  if (stats) {
+    $("#kb-stats").style.display = "flex";
+    $("#kb-stat-docs").textContent = stats.doc_count;
+    $("#kb-stat-chunks").textContent = stats.chunk_count;
+    $("#kb-stat-size").textContent = (stats.total_size / 1024).toFixed(1) + " KB";
+  }
   if (!docs.length) {
     list.innerHTML = '<p class="hint">知识库为空，上传文档后开始构建。</p>';
     return;
@@ -1250,31 +1309,56 @@ async function loadKbDocs() {
   docs.forEach((d) => {
     const el = document.createElement("div");
     el.className = "kb-doc";
-    const t = new Date(d.created_at * 1000).toLocaleString();
+    const t = fmtTime(d.created_at);
+    const icon = d.ext === "md" || d.ext === "markdown" ? "📝"
+      : d.ext === "pdf" ? "📕" : d.ext === "doc" || d.ext === "docx" ? "📘" : "📄";
     el.innerHTML = `
-      <div>
-        <div class="kd-name">📄 ${esc(d.name)}</div>
+      <div class="kd-main">
+        <div class="kd-name">${icon} ${esc(d.name)} <span class="kb-type-tag">${esc(d.type)}</span></div>
         <div class="kd-meta">${d.chunks} 分块 · ${(d.size / 1024).toFixed(1)}KB · ${t}</div>
       </div>
-      <button onclick="deleteKbDoc('${d.id}')">删除</button>`;
+      <div class="kd-actions">
+        <button class="kd-btn" title="查看详情" onclick="openKbDetail('${d.id}')">👁</button>
+        <button class="kd-btn" title="重命名" onclick="renameKbDoc('${d.id}', '${escAttr(d.name)}')">✏️</button>
+        <button class="kd-btn kd-del" title="删除" onclick="deleteKbDoc('${d.id}')">🗑</button>
+      </div>`;
     list.appendChild(el);
   });
+}
+
+async function renameKbDoc(id, oldName) {
+  const name = prompt("重命名文档:", oldName);
+  if (!name || name.trim() === oldName) return;
+  try {
+    await api(`/api/kb/docs/${id}/rename`, {
+      method: "POST",
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    loadKbDocs();
+  } catch (e) {
+    alert(`重命名失败: ${e.message}`);
+  }
 }
 
 async function uploadKb() {
   const input = $("#kb-file");
   if (!input.files.length) { alert("请选择文件"); return; }
   const files = [...input.files];
-  let ok = 0, fail = 0;
+  let ok = 0, fail = 0, fails = [];
   for (const f of files) {
     const fd = new FormData();
     fd.append("file", f);
     try {
       const resp = await fetch("/api/kb/upload", { method: "POST", body: fd });
-      if (resp.ok) ok++; else fail++;
-    } catch (e) { fail++; }
+      if (resp.ok) ok++;
+      else {
+        fail++;
+        const err = await resp.json().catch(() => ({}));
+        fails.push(`${f.name}: ${err.detail || resp.status}`);
+      }
+    } catch (e) { fail++; fails.push(`${f.name}: ${e.message}`); }
   }
-  alert(`上传完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个` : ""}`);
+  alert(`上传完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个\n${fails.join("\n")}` : ""}`);
   input.value = "";
   loadKbDocs();
 }
@@ -1308,7 +1392,7 @@ async function loadCronJobs() {
     const schedule = j.interval_min > 0
       ? `每 ${j.interval_min} 分钟`
       : (j.schedule_at ? `每日 ${j.schedule_at}` : "手动触发");
-    const last = j.last_run ? new Date(j.last_run * 1000).toLocaleString() : "从未";
+    const last = j.last_run ? fmtTime(j.last_run) : "从未";
     el.innerHTML = `
       <div class="cj-head">
         <span class="cj-name">⏰ ${esc(j.name)}</span>
@@ -1602,7 +1686,7 @@ async function searchKbRef(query) {
   try {
     const results = await api("/api/kb/search", {
       method: "POST",
-      body: JSON.stringify({ query, top_k: 5 }),
+      body: JSON.stringify({ query, top_k: 5, highlight: true }),
     });
     if (!results.length) {
       $("#kb-ref-results").innerHTML = '<div class="kb-ref-empty">未找到相关内容</div>';
@@ -1613,9 +1697,11 @@ async function searchKbRef(query) {
     results.forEach((r) => {
       const el = document.createElement("div");
       el.className = "kb-ref-result";
+      // 后端 highlight 字段已含 <mark> 高亮，安全展示
+      const shown = (r.highlight || r.content).slice(0, 400);
       el.innerHTML = `
-        <div class="krr-doc">📄 ${esc(r.doc_name)} (相关度: ${r.score})</div>
-        <div class="krr-content">${esc(r.content.slice(0, 300))}</div>`;
+        <div class="krr-doc">📄 ${esc(r.doc_name)} <span class="kb-type-tag">${esc(r.doc_type || "文档")}</span> <span class="krr-score">${r.score}</span></div>
+        <div class="krr-content">${shown}</div>`;
       el.onclick = () => insertKbRef(r);
       box.appendChild(el);
     });
@@ -2403,7 +2489,7 @@ async function loadUpdateStatus() {
     html += `应用中: ${status.applying ? "是" : "否"}<br>`;
     
     if (status.last_check > 0) {
-      const lastCheck = new Date(status.last_check * 1000).toLocaleString();
+      const lastCheck = fmtTime(status.last_check);
       html += `上次检查: ${lastCheck}<br>`;
     }
     
@@ -2448,7 +2534,7 @@ async function loadUpdateHistory() {
     }
     
     historyDiv.innerHTML = history.map(h => {
-      const time = new Date(h.time * 1000).toLocaleString();
+      const time = fmtTime(h.time);
       const icon = h.result === 'success' ? '✅' : '❌';
       const color = h.result === 'success' ? 'var(--text-secondary)' : '#dc2626';
       return `<div style="padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px;">
@@ -2472,6 +2558,7 @@ let currentWfView = "list";
 let selectedNode = null;
 let draggingNodeType = null;
 let wfNodeCounter = 0;
+let _wfExecTimer = null; // 执行记录 running 自动刷新定时器
 
 // 画布平移与缩放
 let wfCanvasPan = { x: 0, y: 0, scale: 1 };
@@ -2529,8 +2616,8 @@ function renderWfListPage() {
     const status = lastExec ? (lastExec.status === "completed" ? "✅" : "❌") : "";
     const statusText = lastExec ? (lastExec.status === "completed" ? "成功" : "失败") : "未运行";
     const statusClass = lastExec ? (lastExec.status === "completed" ? "wf-status-ok" : "wf-status-fail") : "wf-status-none";
-    const timeStr = wf.updated_at ? new Date(wf.updated_at * 1000).toLocaleString() : "";
-    const createdStr = wf.created_at ? new Date(wf.created_at * 1000).toLocaleDateString() : "";
+    const timeStr = wf.updated_at ? fmtTime(wf.updated_at) : "";
+    const createdStr = wf.created_at ? fmtTime(wf.created_at, false) : "";
     return `
       <div class="wf-card" onclick="openWorkflowEditor('${wf.id}')">
         <div class="wf-card-header">
@@ -2624,6 +2711,7 @@ async function openWorkflowEditor(wfId) {
 // 切换视图
 function switchWfView(view) {
   currentWfView = view;
+  if (_wfExecTimer) { clearTimeout(_wfExecTimer); _wfExecTimer = null; }
   $("#wf-list-view").style.display = view === "list" ? "block" : "none";
   $("#wf-editor-view").style.display = view === "editor" ? "block" : "none";
   $("#wf-templates-view").style.display = view === "templates" ? "block" : "none";
@@ -2635,6 +2723,7 @@ function switchWfView(view) {
 
 // 加载工作流执行记录（渲染到列表容器）
 async function loadWorkflowExecutions() {
+  if (_wfExecTimer) { clearTimeout(_wfExecTimer); _wfExecTimer = null; }
   const container = $("#wf-list-content");
   const cardHtml = allWorkflows.reduce((m, wf) => { m[wf.id] = wf.name; return m; }, {});
   try {
@@ -2653,7 +2742,7 @@ async function loadWorkflowExecutions() {
       const wfName = cardHtml[ex.workflow_id] || esc(ex.workflow_id);
       const status = ex.status === "completed" ? "✅ 成功" : (ex.status === "running" ? "⏳ 运行中" : "❌ 失败");
       const stClass = ex.status === "completed" ? "wf-status-ok" : (ex.status === "running" ? "wf-status-none" : "wf-status-fail");
-      const t = ex.started_at ? new Date(ex.started_at * 1000).toLocaleString() : "";
+      const t = ex.started_at ? fmtTime(ex.started_at) : "";
       const dur = ex.duration_ms ? (ex.duration_ms / 1000).toFixed(1) + "s" : "-";
       const tokens = ex.tokens_used ? String(ex.tokens_used) : "";
       const out = ex.output ? String(ex.output).slice(0, 60) : (ex.error || "");
@@ -2673,6 +2762,10 @@ async function loadWorkflowExecutions() {
     }
     html += '</div>';
     container.innerHTML = html;
+    // 若存在运行中的执行记录，4 秒后自动刷新
+    if (execs.some((e) => e.status === "running")) {
+      _wfExecTimer = setTimeout(() => { _wfExecTimer = null; loadWorkflowExecutions(); }, 4000);
+    }
   } catch (e) {
     if (container) container.innerHTML = `<p style="font-size:12px;color:#dc2626;padding:16px;">加载失败: ${esc(e.message || e)}</p>`;
   }
@@ -2711,7 +2804,7 @@ async function showWfExecDetail(eid, btn) {
         const nm = ns.error ? `<div style="color:#ef4444;margin-top:2px;">${esc(String(ns.error))}</div>` : "";
         nh += `<div style="margin-bottom:6px;">${st} <b>${esc(nid)}</b> · <span class="wf-status-muted">${d}</span>${nm}</div>`;
       }
-      parts.push(`节点执行<div style="font-weight:normal">${nh}</div>`);
+      parts.push(`<div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">执行状态 nodes_status</div><div>${nh}</div></div>`);
     }
     if (ex.node_requests && typeof ex.node_requests === "object" && Object.keys(ex.node_requests).length) {
       let rq = "";
@@ -2723,15 +2816,15 @@ async function showWfExecDetail(eid, btn) {
           <div style="background:var(--code-bg);color:var(--code-text);border-radius:5px;padding:6px 8px;font-size:11px;white-space:pre-wrap;word-break:break-word;">${esc(String(resp).slice(0, 800))}</div>
         </div>`;
       }
-      parts.push(`节点请求/响应<div style="font-weight:400">${rq}</div>`);
+      parts.push(`<div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">节点请求/响应 node_requests</div>${rq}</div>`);
     }
     // 输出
     if (ex.output !== undefined && ex.output !== null) {
-      parts.push("输出", esc(typeof ex.output === "string" ? ex.output : JSON.stringify(ex.output, null, 2)));
+      parts.push(box("输出 output", esc(typeof ex.output === "string" ? ex.output : JSON.stringify(ex.output, null, 2))));
     }
     // 失败原因
     if (ex.status !== "completed" && ex.error) {
-      parts.push(`失败原因<div style="font-weight:400"><span style="color:#ef4444;">${esc(String(ex.error))}</span></div>`);
+      parts.push(box("失败原因 error", `<span style="color:#ef4444;">${esc(String(ex.error))}</span>`));
     }
     panel.innerHTML = parts.join("") || '<p style="color:var(--text-muted);font-size:12px;">（无更多详情）</p>';
   } catch (e) {
@@ -3855,7 +3948,7 @@ async function showWfObservation(wfId) {
     execs.forEach(exec => {
       const status = exec.status === "completed" ? "✅ 成功" : "❌ 失败";
       const statusClass = exec.status === "completed" ? "wf-status-ok" : "wf-status-fail";
-      const timeStr = exec.started_at ? new Date(exec.started_at * 1000).toLocaleString() : "";
+      const timeStr = exec.started_at ? fmtTime(exec.started_at) : "";
       const nodeReqs = exec.node_requests || {};
       const nodeCount = Object.keys(nodeReqs).length;
 
@@ -4043,7 +4136,8 @@ async function executeWfTestFromInput() {
 }
 
 async function executeWfTestWithMessage(text) {
-  const status = $("#wf-test-status");
+  const status = $("#wf-test-status"); // 兼容旧弹窗状态元素（可能不存在）
+  if (status) status.textContent = "运行中…";
   // 收集输入
   const startNode = currentWorkflow.nodes.find(n => n.type === "start");
   const fields = (startNode?.config?.input_fields) || ["input"];
@@ -5010,6 +5104,41 @@ function bindEvents() {
     });
   }
 
+  // 界面语言（持久化偏好）
+  const langSel = document.getElementById("lang-select");
+  if (langSel) {
+    langSel.value = state.lang;
+    langSel.addEventListener("change", () => {
+      state.lang = langSel.value;
+      localStorage.setItem("abcode-lang", state.lang);
+      const info = $("#settings-lang-hint");
+      if (info) {
+        info.textContent = state.lang === "en" ? "English UI coming soon; preference saved." : "已保存语言偏好（完整英文界面待后续版本）";
+        info.style.display = "block";
+        setTimeout(() => { info.style.display = "none"; }, 2500);
+      }
+    });
+  }
+
+  // 时区（影响所有时间显示）
+  const tzSel = document.getElementById("tz-select");
+  if (tzSel) {
+    tzSel.value = state.timezone || "Asia/Shanghai";
+    tzSel.addEventListener("change", () => {
+      state.timezone = tzSel.value;
+      localStorage.setItem("abcode-timezone", state.timezone);
+      const info = $("#settings-tz-hint");
+      if (info) {
+        info.textContent = "时区已更新，时间显示立即生效";
+        info.style.display = "block";
+        setTimeout(() => { info.style.display = "none"; }, 2500);
+      }
+      // 重绘当前可见的时间（刷新整个界面时间区域）
+      if (state.currentConvId) loadMessages(state.currentConvId);
+      if (currentWfView === "executions") loadWorkflowExecutions();
+    });
+  }
+
   // 提示词建议设置
   const suggestionToggle = document.getElementById("suggestion-toggle");
   if (suggestionToggle) {
@@ -5110,6 +5239,10 @@ function autoResize(el) {
 
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escAttr(s) {
+  return esc(s).replace(/'/g, "&#39;");
 }
 
 // ===== 模式选择器 =====
