@@ -65,7 +65,34 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           
+          # Show NSIS location
+          Write-Host "Checking NSIS..."
+          $nsisPath = Get-Command makensis.exe -ErrorAction SilentlyContinue
+          if ($nsisPath) {
+            Write-Host "NSIS found at: $($nsisPath.Source)"
+          } else {
+            Write-Host "NSIS not in PATH, checking common locations..."
+            $possiblePaths = @(
+              "C:\Program Files (x86)\NSIS\makensis.exe",
+              "C:\Program Files\NSIS\makensis.exe",
+              "C:\nsis\makensis.exe"
+            )
+            foreach ($p in $possiblePaths) {
+              if (Test-Path $p) {
+                Write-Host "Found NSIS at: $p"
+                $nsisPath = $p
+                break
+              }
+            }
+          }
+          
+          if (-not $nsisPath) {
+            Write-Error "NSIS not found!"
+            exit 1
+          }
+          
           # Build executable with PyInstaller
+          Write-Host "Building with PyInstaller..."
           python -m PyInstaller `
             --onefile `
             --name ABcode `
@@ -77,18 +104,35 @@ jobs:
             --hidden-import=fastapi `
             --hidden-import=sqlite3 `
             backend/main.py
-
+          
+          # Verify exe was created
+          if (-not (Test-Path "dist/ABcode.exe")) {
+            Write-Error "PyInstaller failed - dist/ABcode.exe not found"
+            exit 1
+          }
+          Write-Host "PyInstaller success: dist/ABcode.exe created"
+          
           # Copy resources for installer
-          Copy-Item build/start_windows.bat dist/
-          Copy-Item build/icon.ico dist/
+          Write-Host "Copying installer resources..."
+          Copy-Item build/start_windows.bat dist/ -Force
+          Copy-Item build/icon.ico dist/ -Force
           New-Item -ItemType Directory -Force -Path dist/build | Out-Null
-          Copy-Item build/icon.ico dist/build/
-          Copy-Item build/banner.bmp dist/build/
-
+          Copy-Item build/icon.ico dist/build/ -Force
+          Copy-Item build/banner.bmp dist/build/ -Force
+          
           # Create installer with NSIS (pass version from tag)
-          # GitHub Actions Windows runner has NSIS in PATH after choco install
           $version = $env:VERSION.TrimStart('v')
-          & "C:\Program Files (x86)\NSIS\makensis.exe" /DVERSION="$version" build/installer.nsi
+          Write-Host "Creating installer with NSIS version: $version"
+          & $nsisPath /DVERSION="$version" build/installer.nsi
+          
+          # Verify installer was created
+          $installer = Get-ChildItem dist/ABcode-Setup-*.exe -ErrorAction SilentlyContinue
+          if ($installer) {
+            Write-Host "Installer created: $($installer.FullName) ($($installer.Length) bytes)"
+          } else {
+            Write-Error "Installer not found in dist/"
+            exit 1
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
