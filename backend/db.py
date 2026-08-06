@@ -1308,12 +1308,54 @@ def _init_workflow_templates():
                 {"source": "polish", "target": "end"},
             ]),
         },
+        {
+            "id": "tpl_batch",
+            "name": "批量处理",
+            "description": "遍历输入数组，逐项调用LLM处理，收集结果",
+            "category": "advanced",
+            "icon": "🔄",
+            "nodes": json.dumps([
+                {"id": "start", "type": "start", "label": "开始", "x": 100, "y": 200, "config": {"input_fields": ["items"]}},
+                {"id": "loop1", "type": "loop", "label": "循环", "x": 300, "y": 200, "config": {"array_variable": "{{items}}", "item_variable": "item", "index_variable": "index", "max_iterations": 100}},
+                {"id": "llm1", "type": "llm", "label": "逐项处理", "x": 550, "y": 200, "config": {"prompt": "请处理以下内容，直接给出处理结果：\n\n{{item}}", "model": "", "output_variable": "processed"}},
+                {"id": "end", "type": "end", "label": "结束", "x": 800, "y": 200, "config": {"output_field": "loop1_results"}},
+            ]),
+            "edges": json.dumps([
+                {"source": "start", "target": "loop1"},
+                {"source": "loop1", "target": "llm1"},
+                {"source": "llm1", "target": "end"},
+            ]),
+        },
+        {
+            "id": "tpl_data_pipeline",
+            "name": "数据处理管道",
+            "description": "解析JSON→遍历转换→结果输出，展示iteration与json_parse",
+            "category": "advanced",
+            "icon": "📊",
+            "nodes": json.dumps([
+                {"id": "start", "type": "start", "label": "开始", "x": 100, "y": 200, "config": {"input_fields": ["raw"]}},
+                {"id": "jp", "type": "json_parse", "label": "JSON解析", "x": 300, "y": 200, "config": {"input": "{{raw}}"}},
+                {"id": "iter1", "type": "iteration", "label": "遍历", "x": 500, "y": 200, "config": {"array_variable": "{{data}}", "item_variable": "item"}},
+                {"id": "tp1", "type": "text_process", "label": "转大写", "x": 700, "y": 200, "config": {"input": "{{item}}", "op": "upper", "output_variable": "upcased"}},
+                {"id": "end", "type": "end", "label": "结束", "x": 900, "y": 200, "config": {"output_field": "iter1_results"}},
+            ]),
+            "edges": json.dumps([
+                {"source": "start", "target": "jp"},
+                {"source": "jp", "target": "iter1"},
+                {"source": "iter1", "target": "tp1"},
+                {"source": "tp1", "target": "end"},
+            ]),
+        },
     ]
     
     conn = get_conn()
     for t in builtin_templates:
-        conn.execute("""INSERT OR IGNORE INTO workflow_templates (id, name, description, category, nodes, edges, icon, usage_count, created_at)
-                        VALUES (?,?,?,?,?,?,?,?,?)""",
+        conn.execute("""INSERT INTO workflow_templates (id, name, description, category, nodes, edges, icon, usage_count, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                        ON CONFLICT(id) DO UPDATE SET
+                          name=excluded.name, description=excluded.description,
+                          category=excluded.category, nodes=excluded.nodes,
+                          edges=excluded.edges, icon=excluded.icon""",
                      (t["id"], t["name"], t["description"], t["category"],
                       t["nodes"], t["edges"], t["icon"], 0, time.time()))
     conn.commit()
