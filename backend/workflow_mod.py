@@ -158,7 +158,7 @@ class WorkflowEngine:
                 "nodes_status": self.nodes_status,
             }
 
-    def _execute_node(self, node_id, _in_loop=False):
+    def _execute_node(self, node_id, _in_loop=False, _prev_output=None):
         """执行单个节点"""
         if self._stopped and not _in_loop:
             return self._final_output
@@ -182,11 +182,14 @@ class WorkflowEngine:
                 output = self._execute_start(node, config)
             elif node_type == "end":
                 output = self._execute_end(node, config)
+                if _in_loop and output == "" and _prev_output is not None:
+                    # 循环体内 end 作为边界：若 output_field 未设置，取上一个节点的输出
+                    output = _prev_output
             elif node_type == "stop":
                 if _in_loop:
                     # 循环体内 stop：作为本次迭代边界，不终止主流程
                     output_field = config.get("output_field", "output")
-                    output = self.variables.get(output_field, "")
+                    output = self.variables.get(output_field, _prev_output if _prev_output is not None else "")
                     loop_boundary = True
                 else:
                     output = self._execute_stop(node, config)
@@ -218,6 +221,24 @@ class WorkflowEngine:
                 output = self._execute_template(node, config)
             elif node_type == "loop":
                 output = self._execute_loop(node, config)
+            elif node_type == "iteration":
+                output = self._execute_iteration(node, config)
+            elif node_type == "kb_index":
+                output = self._execute_kb_index(node, config)
+            elif node_type == "memory_read":
+                output = self._execute_memory_read(node, config)
+            elif node_type == "memory_write":
+                output = self._execute_memory_write(node, config)
+            elif node_type == "memory_clear":
+                output = self._execute_memory_clear(node, config)
+            elif node_type == "mcp_call":
+                output = self._execute_mcp_call(node, config)
+            elif node_type == "json_parse":
+                output = self._execute_json_parse(node, config)
+            elif node_type == "email":
+                output = self._execute_email(node, config)
+            elif node_type == "webhook":
+                output = self._execute_webhook(node, config)
             else:
                 raise RuntimeError(f"未知节点类型: {node_type}")
 
@@ -247,7 +268,7 @@ class WorkflowEngine:
 
             next_node = self._get_next_node(node_id)
             if next_node:
-                return self._execute_node(next_node, _in_loop=_in_loop)
+                return self._execute_node(next_node, _in_loop=_in_loop, _prev_output=output)
 
             return output
 
@@ -409,7 +430,7 @@ class WorkflowEngine:
                 # 循环体内遇到 end/stop 作为边界：不终止主流程，取当时输出
                 if body_start:
                     try:
-                        out = self._execute_node(body_start, _in_loop=True)
+                        out = self._execute_node(body_start, _in_loop=True, _prev_output=item)
                     except Exception:
                         raise
                 else:
@@ -423,6 +444,254 @@ class WorkflowEngine:
         self.variables[node["id"] + "_output"] = results
         self._store_output(node["id"], results)
         return results
+
+    def _execute_iteration(self, node, config):
+        """遍历节点：遍历数组，对每项执行下游链，收集结果（无次数限制版循环）"""
+        array_expr = config.get("array_variable", "{{input}}")
+        item_var = config.get("item_variable", "item") or "item"
+
+        raw = render_template(array_expr, self.variables)
+        if isinstance(raw, str) and "{{" not in array_expr:
+            raw = self.variables.get(array_expr.strip("{}").strip(), raw)
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw) if raw.strip().startswith("[") else raw.split(",")
+            except Exception:
+                raw = raw.split(",") if raw else []
+        if not isinstance(raw, list):
+            raw = [raw] if raw else []
+
+        body_start = self._get_next_node(node["id"])
+        results = []
+        loop_guard = getattr(self, "_loop_guard", 0) + 1
+        if loop_guard > 50:
+            raise RuntimeError("循环嵌套过深（>50），疑似死循环")
+        self._loop_guard = loop_guard
+        try:
+            for idx, item in enumerate(raw):
+                self.variables[item_var] = item
+                self.variables["index"] = idx
+                if body_start:
+                    out = self._execute_node(body_start, _in_loop=True, _prev_output=item)
+                else:
+                    out = item
+                results.append(out)
+        finally:
+            self._loop_guard = loop_guard - 1
+
+        self.variables[node["id"] + "_results"] = results
+        self.variables[node["id"] + "_output"] = results
+        self._store_output(node["id"], results)
+        return results
+
+    def _execute_kb_index(self, node, config):
+        """知识入库节点：把文本内容写入知识库"""
+        kb_id = config.get("kb_id") or "default"
+        mode = config.get("mode", "append")
+        content = render_template(config.get("content", ""), self.variables) or str(self.variables.get("input", ""))
+        title = render_template(config.get("title", ""), self.variables) or f"workflow_{node['id']}"
+
+        if not content or not content.strip():
+            raise RuntimeError("知识入库内容为空")
+
+        # 确保知识库存在
+        from rag import create_kb, list_kbs
+        kbs = list_kbs()
+        if kb_id not in [k["id"] for k in kbs]:
+            create_kb(kb_id)
+
+        filename = f"{title}.md"
+        try:
+            from rag import add_document
+            doc_id, chunk_count, is_dup = add_document(filename, content.encode("utf-8"), kb_id=kb_id)
+        except Exception as e:
+            raise RuntimeError(f"知识入库失败: {e}")
+
+        result = {
+            "doc_id": doc_id, "chunks": chunk_count, "duplicate": is_dup, "kb_id": kb_id,
+        }
+        output = json.dumps(result, ensure_ascii=False)
+        self.variables[node["id"] + "_doc_id"] = doc_id
+        self._store_output(node["id"], output)
+        return output
+
+    def _execute_memory_read(self, node, config):
+        """记忆读取节点：读取工作流记忆"""
+        memory_key = render_template(config.get("memory_key", ""), self.variables) or str(self.variables.get("input", ""))
+        namespace = config.get("namespace", "default")
+        mem = self._memory_get(namespace, memory_key)
+        self._store_output(node["id"], mem)
+        return mem
+
+    def _execute_memory_write(self, node, config):
+        """记忆写入节点：保存值到工作流记忆"""
+        memory_key = render_template(config.get("memory_key", ""), self.variables)
+        content = render_template(config.get("content", ""), self.variables) or str(self.variables.get("input", ""))
+        namespace = config.get("namespace", "default")
+        if not memory_key:
+            raise RuntimeError("记忆写入缺少 key")
+        self._memory_set(namespace, memory_key, content)
+        self._store_output(node["id"], content)
+        return content
+
+    def _execute_memory_clear(self, node, config):
+        """记忆清除节点：清空工作流记忆"""
+        namespace = config.get("namespace", "default")
+        cleared = self._memory_clear(namespace)
+        self._store_output(node["id"], str(cleared))
+        return str(cleared)
+
+    def _memory_load(self):
+        """加载工作流记忆存储（按工作流隔离）"""
+        import os
+        mem_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "wf_memory")
+        os.makedirs(mem_dir, exist_ok=True)
+        wf_id = (self.workflow.get("id") or "default").replace("/", "_")
+        path = os.path.join(mem_dir, f"{wf_id}.json")
+        if not hasattr(self, "_mem_path"):
+            self._mem_path = path
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _memory_save(self, data):
+        try:
+            with open(self._mem_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _memory_get(self, namespace, key):
+        data = self._memory_load()
+        ns = data.get(namespace, {})
+        return ns.get(key, "")
+
+    def _memory_set(self, namespace, key, value):
+        data = self._memory_load()
+        data.setdefault(namespace, {})[key] = value
+        self._memory_save(data)
+
+    def _memory_clear(self, namespace):
+        data = self._memory_load()
+        if namespace in data:
+            del data[namespace]
+            self._memory_save(data)
+            return len(data)
+        return len(data)
+
+    def _execute_mcp_call(self, node, config):
+        """MCP 调用节点：调用已配置的 MCP 服务器工具"""
+        mcp_server = config.get("mcp_server", "")
+        tool_name = config.get("tool_name", "")
+        arguments = config.get("arguments", "{}")
+        if isinstance(arguments, str):
+            arguments = render_template(arguments, self.variables)
+            try:
+                arguments = json.loads(arguments) if arguments.strip() else {}
+            except Exception:
+                arguments = {"input": arguments}
+        if not mcp_server or not tool_name:
+            raise RuntimeError("MCP 调用缺少服务器或工具名")
+
+        from mcp_client import execute_mcp_tool, get_client
+        mcp_id = mcp_server
+        # 支持传服务器名
+        import db
+        servers = db.list_mcp()
+        for s in servers:
+            if s["id"] == mcp_server or s["name"] == mcp_server:
+                mcp_id = s["id"]
+                break
+
+        ok, result = execute_mcp_tool(mcp_id, tool_name, arguments)
+        if not ok:
+            raise RuntimeError(f"MCP 调用失败: {result}")
+        output = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+        self.variables[node["id"] + "_result"] = result
+        self._store_output(node["id"], output)
+        return output
+
+    def _execute_json_parse(self, node, config):
+        """JSON 解析节点：解析 JSON 文本并输出结构化数据"""
+        text = render_template(config.get("input", ""), self.variables) or str(self.variables.get("input", ""))
+        try:
+            data = json.loads(text)
+        except Exception as e:
+            raise RuntimeError(f"JSON 解析失败: {e}")
+        # 把顶层字段展开到变量
+        if isinstance(data, dict):
+            for k, v in data.items():
+                self.variables[k] = v
+        output = json.dumps(data, ensure_ascii=False, indent=2)
+        self.variables[node["id"] + "_data"] = data
+        self._store_output(node["id"], output)
+        return output
+
+    def _execute_email(self, node, config):
+        """邮件节点：通过 SMTP 发送邮件（从设置读取配置）"""
+        to = render_template(config.get("to", ""), self.variables)
+        subject = render_template(config.get("subject", ""), self.variables)
+        body = render_template(config.get("body", ""), self.variables)
+        if not to:
+            raise RuntimeError("邮件缺少收件人")
+
+        import db
+        smtp_host = db.get_setting("smtp_host", "")
+        smtp_port = int(db.get_setting("smtp_port", "465") or 465)
+        smtp_user = db.get_setting("smtp_user", "")
+        smtp_pass = db.get_setting("smtp_pass", "")
+        from_addr = db.get_setting("smtp_from", smtp_user)
+        if not smtp_host or not smtp_user or not smtp_pass:
+            raise RuntimeError("未配置 SMTP，请先到设置中配置邮箱")
+
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.header import Header
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = Header(subject, "utf-8")
+        msg["From"] = from_addr
+        msg["To"] = to
+        try:
+            if smtp_port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(from_addr, [x.strip() for x in to.split(",")], msg.as_string())
+            server.quit()
+        except Exception as e:
+            raise RuntimeError(f"邮件发送失败: {e}")
+
+        output = f"已发送至 {to}"
+        self._store_output(node["id"], output)
+        return output
+
+    def _execute_webhook(self, node, config):
+        """Webhook 节点：发送 HTTP 回调"""
+        url = render_template(config.get("url", ""), self.variables)
+        method = config.get("method", "POST").upper()
+        headers = config.get("headers", {})
+        body = render_template(config.get("body", ""), self.variables) if config.get("body") else None
+        if not url:
+            raise RuntimeError("Webhook 缺少 URL")
+
+        import httpx
+        try:
+            if method == "GET":
+                resp = httpx.get(url, headers=headers, timeout=30)
+            elif method == "PUT":
+                resp = httpx.put(url, headers=headers, content=body, timeout=30)
+            else:
+                resp = httpx.post(url, headers=headers, content=body, timeout=30)
+            output = resp.text
+            self.variables[node["id"] + "_status"] = resp.status_code
+            self._store_output(node["id"], output)
+            return output
+        except Exception as e:
+            raise RuntimeError(f"Webhook 请求失败: {e}")
 
     def _execute_llm(self, node, config):
         prompt = render_template(config.get("prompt", ""), self.variables)
