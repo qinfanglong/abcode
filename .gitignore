@@ -20,6 +20,10 @@ macapp/build/
 *.app
 *.zip
 
+# Windows 构建产物
+dist/
+build/*.exe
+
 # 操作系统
 .DS_Store
 Thumbs.db

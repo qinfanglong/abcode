@@ -78,9 +78,26 @@ def _openai_chat(provider, model, messages, stream=True, timeout=180, tools=None
 def _ollama_chat(provider, model, messages, stream=True, timeout=180, tools=None):
     """调用 Ollama 本地模型"""
     url = provider["base_url"].rstrip("/") + "/api/chat"
+    # 兼容多模态：content 数组(新版) -> content 字符串 + message.images 字段
+    msgs = []
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, list):
+            text_parts = []
+            images_in_msg = []
+            for item in c:
+                if item.get("type") == "text":
+                    text_parts.append(item.get("text", ""))
+                elif item.get("type") == "image":
+                    images_in_msg.append(item.get("data", ""))
+            m = dict(m)
+            m["content"] = "\n".join(text_parts)
+            if images_in_msg:
+                m["images"] = images_in_msg
+        msgs.append(m)
     payload = {
         "model": model,
-        "messages": messages,
+        "messages": msgs,
         "stream": stream,
     }
     if tools:

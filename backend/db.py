@@ -871,6 +871,7 @@ def init_workflows_table():
         output TEXT DEFAULT '',
         status TEXT DEFAULT 'pending',
         nodes_status TEXT DEFAULT '{}',
+        node_requests TEXT DEFAULT '{}',
         error TEXT DEFAULT '',
         started_at REAL,
         completed_at REAL,
@@ -895,6 +896,14 @@ def init_workflows_table():
     """)
     conn.commit()
     conn.close()
+    # 迁移：为旧数据库添加 node_requests 列
+    try:
+        conn2 = get_conn()
+        conn2.execute("ALTER TABLE workflow_executions ADD COLUMN node_requests TEXT DEFAULT '{}'")
+        conn2.commit()
+        conn2.close()
+    except Exception:
+        pass  # 列已存在，忽略
     # 初始化内置模板
     _init_workflow_templates()
 
@@ -1046,6 +1055,19 @@ def _init_workflow_templates():
 
 # ----- 工作流 CRUD -----
 
+def _decode_json(val, default):
+    """安全解析 JSON 字段，兼容双重编码"""
+    for _ in range(3):
+        if isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except Exception:
+                break
+        else:
+            break
+    return val if val is not None else default
+
+
 def list_workflows():
     conn = get_conn()
     rows = conn.execute("SELECT * FROM workflows ORDER BY updated_at DESC").fetchall()
@@ -1054,8 +1076,7 @@ def list_workflows():
     for r in rows:
         d = dict(r)
         for k in ("nodes", "edges", "config", "tags"):
-            try: d[k] = json.loads(d[k] or "[]" if k != "config" else "{}")
-            except: d[k] = [] if k != "config" else {}
+            d[k] = _decode_json(d.get(k), [] if k != "config" else {})
         out.append(d)
     return out
 
@@ -1068,8 +1089,7 @@ def get_workflow(wid):
         return None
     d = dict(row)
     for k in ("nodes", "edges", "config", "tags"):
-        try: d[k] = json.loads(d[k] or "[]" if k != "config" else "{}")
-        except: d[k] = [] if k != "config" else {}
+        d[k] = _decode_json(d.get(k), [] if k != "config" else {})
     return d
 
 
@@ -1109,7 +1129,7 @@ def list_workflow_executions(wid=None, limit=50):
     out = []
     for r in rows:
         d = dict(r)
-        for k in ("input", "nodes_status"):
+        for k in ("input", "nodes_status", "node_requests"):
             try: d[k] = json.loads(d[k] or "{}")
             except: d[k] = {}
         out.append(d)
@@ -1118,15 +1138,16 @@ def list_workflow_executions(wid=None, limit=50):
 
 def save_workflow_execution(execution):
     conn = get_conn()
-    conn.execute("""INSERT INTO workflow_executions (id, workflow_id, input, output, status, nodes_status, error, started_at, completed_at, duration_ms, tokens_used)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    conn.execute("""INSERT INTO workflow_executions (id, workflow_id, input, output, status, nodes_status, node_requests, error, started_at, completed_at, duration_ms, tokens_used)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
                       output=excluded.output, status=excluded.status, nodes_status=excluded.nodes_status,
-                      error=excluded.error, completed_at=excluded.completed_at, duration_ms=excluded.duration_ms,
-                      tokens_used=excluded.tokens_used""",
+                      node_requests=excluded.node_requests, error=excluded.error, completed_at=excluded.completed_at,
+                      duration_ms=excluded.duration_ms, tokens_used=excluded.tokens_used""",
                  (execution["id"], execution["workflow_id"],
                   json.dumps(execution.get("input", {})), execution.get("output", ""),
                   execution.get("status", "pending"), json.dumps(execution.get("nodes_status", {})),
+                  json.dumps(execution.get("node_requests", {})),
                   execution.get("error", ""), execution.get("started_at", time.time()),
                   execution.get("completed_at"), execution.get("duration_ms", 0),
                   execution.get("tokens_used", 0)))
@@ -1147,8 +1168,7 @@ def list_workflow_templates(category=None):
     for r in rows:
         d = dict(r)
         for k in ("nodes", "edges"):
-            try: d[k] = json.loads(d[k] or "[]")
-            except: d[k] = []
+            d[k] = _decode_json(d.get(k), [])
         out.append(d)
     return out
 
@@ -1161,8 +1181,7 @@ def get_workflow_template(tid):
         return None
     d = dict(row)
     for k in ("nodes", "edges"):
-        try: d[k] = json.loads(d[k] or "[]")
-        except: d[k] = []
+        d[k] = _decode_json(d.get(k), [])
     return d
 
 

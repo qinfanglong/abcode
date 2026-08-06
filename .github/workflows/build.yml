@@ -7,6 +7,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 构建 Mac .app
+        run: |
+          chmod +x build_mac.sh
+          ./build_mac.sh
+          cd dist && zip -r ABcode-mac-${{ github.ref_name }}.zip ABcode.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dist
+          path: dist/ABcode-mac-*.zip
+
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -18,9 +35,8 @@ jobs:
         run: |
           python -m pip install -r backend/requirements.txt
           mkdir -p dist_linux
-          # 整合运行时文件（不含用户数据 data/、.venv）
           tar -czf dist_linux/ABcode-linux-${{ github.ref_name }}.tar.gz \
-            backend frontend macapp scripts  2>/dev/null || \
+            backend frontend macapp scripts 2>/dev/null || \
           tar -czf dist_linux/ABcode-linux-${{ github.ref_name }}.tar.gz \
             backend frontend macapp
           tar -czf dist_linux/ABcode-linux-source-${{ github.ref_name }}.tar.gz \
@@ -38,21 +54,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: 构建 Windows 包
+      - name: 安装 PyInstaller 和 NSIS
+        run: |
+          python -m pip install pyinstaller --quiet
+          choco install nsis -y --no-progress
+      - name: 构建 Windows .exe 和安装包
         shell: bash
         run: |
-          python -m pip install -r backend/requirements.txt
-          mkdir -p dist_win
-          tar -czf dist_win/ABcode-windows-${{ github.ref_name }}.tar.gz \
-            backend frontend macapp start.bat README.md
+          # Build executable with PyInstaller
+          python -m PyInstaller \
+            --onefile \
+            --name ABcode \
+            --icon=build/icon.ico \
+            --add-data "frontend;frontend" \
+            --add-data "backend;backend" \
+            --add-data "backend/requirements.txt;." \
+            --hidden-import=uvicorn \
+            --hidden-import=fastapi \
+            --hidden-import=sqlite3 \
+            backend/main.py
+
+          # Copy start script and resources
+          cp build/start_windows.bat dist/
+          cp build/icon.ico dist/
+          mkdir -p dist/build
+          cp build/icon.ico dist/build/
+          cp build/banner.bmp dist/build/
+
+          # Create installer with NSIS
+          /c/Program\ Files\ \(x86\)/NSIS/makensis.exe build/installer.nsi
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist_win/
+          path: dist/ABcode-Setup-*.exe
           if-no-files-found: ignore
 
   release:
-    needs: [build-linux, build-windows]
+    needs: [build-mac, build-linux, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -66,5 +104,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/*.zip
             dist/*.tar.gz
+            dist/*.exe
           generate_release_notes: true

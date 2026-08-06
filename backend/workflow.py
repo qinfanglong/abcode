@@ -113,6 +113,17 @@ class WorkflowEngine:
         self.start_time = None
         self._stopped = False
         self._final_output = None
+        self._event_callback = None  # 流式回调
+        self.node_requests = {}  # 节点请求/响应观测 {node_id: {request, response, duration_ms}}
+
+    def set_event_callback(self, callback):
+        """设置流式事件回调"""
+        self._event_callback = callback
+
+    def _emit_event(self, event_type, data):
+        """发送流式事件"""
+        if self._event_callback:
+            self._event_callback(event_type, data)
 
     def execute(self, input_data=None):
         """执行工作流"""
@@ -160,6 +171,10 @@ class WorkflowEngine:
         config = node.get("config", {})
 
         self.nodes_status[node_id] = {"status": "running", "started_at": time.time()}
+        self._emit_event("node_status", {
+            "node_id": node_id, "type": node_type,
+            "label": node.get("label", node_type), "status": "running"
+        })
 
         try:
             if node_type == "start":
@@ -197,12 +212,18 @@ class WorkflowEngine:
             else:
                 raise RuntimeError(f"未知节点类型: {node_type}")
 
+            duration_ms = int((time.time() - self.nodes_status[node_id]["started_at"]) * 1000)
             self.nodes_status[node_id] = {
                 "status": "completed",
                 "started_at": self.nodes_status[node_id]["started_at"],
                 "completed_at": time.time(),
                 "output": str(output)[:500] if output else "",
             }
+            self._emit_event("node_status", {
+                "node_id": node_id, "type": node_type,
+                "label": node.get("label", node_type), "status": "completed",
+                "duration_ms": duration_ms
+            })
 
             if self._stopped:
                 return self._final_output
@@ -218,18 +239,35 @@ class WorkflowEngine:
             return output
 
         except Exception as e:
+            duration_ms = int((time.time() - self.nodes_status[node_id]["started_at"]) * 1000)
             self.nodes_status[node_id] = {
                 "status": "failed",
                 "started_at": self.nodes_status[node_id]["started_at"],
                 "completed_at": time.time(),
                 "error": str(e),
             }
+            self._emit_event("node_status", {
+                "node_id": node_id, "type": node_type,
+                "label": node.get("label", node_type), "status": "failed",
+                "error": str(e), "duration_ms": duration_ms
+            })
             raise
 
     # ================= LLM 辅助 =================
 
-    def _pick_provider(self, model=""):
+    def _pick_provider(self, model="", model_source=""):
         """选择供应商：优先匹配指定模型，否则取第一个启用的"""
+        # 本地模型：从 Ollama 读取
+        if model_source == "local" and model:
+            local_provider = {
+                "id": "ollama_local",
+                "name": "Ollama (本地)",
+                "type": "ollama",
+                "base_url": "http://localhost:11434",
+                "enabled": True,
+            }
+            return local_provider, model
+        
         providers = db.list_providers()
         if model:
             for p in providers:
@@ -245,15 +283,15 @@ class WorkflowEngine:
             return p, m
         return None, ""
 
-    def _call_llm(self, prompt, model="", system="", temperature=None, max_tokens=None):
+    def _call_llm(self, prompt, model="", system="", temperature=None, max_tokens=None, model_source=""):
         """调用 LLM 并返回文本（修复：使用 stream_chat）"""
-        provider, m = self._pick_provider(model)
+        provider, m = self._pick_provider(model, model_source)
         if not provider:
             raise RuntimeError("没有可用的LLM供应商，请先在设置中配置")
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": self._build_prompt_content(prompt, provider)})
 
         parts = []
         for evt in llm.stream_chat(provider, m, messages, tools=None):
@@ -264,6 +302,31 @@ class WorkflowEngine:
         text = "".join(parts)
         self.tokens_used += max(1, len(text) // 4)
         return text
+
+    def _build_prompt_content(self, prompt, provider=None):
+        """把测试面板附件转成多模态 content；云端用 image_url，本地 Ollama 用 image data"""
+        attachments = self.variables.get("_attachments") or []
+        # 只当存在图片附件时才构建多模态 content
+        images = [a for a in attachments if (a.get("type") or "").startswith("image/")]
+        if not images:
+            return prompt
+        # 判断是否为 Ollama 本地模型
+        base = (provider or {}).get("base_url", "").lower()
+        is_ollama = "ollama" in base or ":11434" in base or (provider or {}).get("type") == "ollama"
+        content = [{"type": "text", "text": prompt or ""}]
+        for img in images:
+            data = img.get("data", "")
+            if data.startswith("data:"):
+                # 去掉 data:image/xxx;base64, 前缀，取纯 base64
+                raw = data.split(",", 1)[1] if "," in data else data
+            else:
+                raw = data
+            if is_ollama:
+                content.append({"type": "image", "data": raw})
+            else:
+                mime = img.get("type", "image/jpeg")
+                content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{raw}"}})
+        return content
 
     def _store_output(self, node_id, output):
         """把节点输出存到变量，支持指定变量名"""
@@ -299,8 +362,27 @@ class WorkflowEngine:
     def _execute_llm(self, node, config):
         prompt = render_template(config.get("prompt", ""), self.variables)
         model = config.get("model", "")
+        model_source = config.get("model_source", "")
         system = render_template(config.get("system", ""), self.variables)
-        output = self._call_llm(prompt, model=model, system=system)
+        req_start = time.time()
+        provider, m = self._pick_provider(model, model_source)
+        # 构建请求记录
+        req_body = {
+            "model": m,
+            "provider": provider.get("name", "") if provider else "",
+            "provider_type": provider.get("type", "") if provider else "",
+            "system": system[:500] if system else "",
+            "prompt": prompt[:2000],
+            "messages_preview": [{"role": "user", "content": prompt[:500]}],
+        }
+        output = self._call_llm(prompt, model=model, system=system, model_source=model_source)
+        req_duration = int((time.time() - req_start) * 1000)
+        self.node_requests[node["id"]] = {
+            "request": req_body,
+            "response": {"text": output[:2000]},
+            "duration_ms": req_duration,
+            "type": "llm",
+        }
         self._store_output(node["id"], output)
         return output
 
@@ -308,12 +390,20 @@ class WorkflowEngine:
         """知识库检索节点"""
         query = render_template(config.get("query", ""), self.variables) or str(self.variables.get("input", ""))
         top_k = int(config.get("top_k", 5) or 5)
+        req_start = time.time()
         results = rag.search(query, top_k=top_k)
+        req_duration = int((time.time() - req_start) * 1000)
         # 输出格式：拼接文本
         lines = []
         for i, r in enumerate(results):
             lines.append(f"[{i+1}] 《{r['doc_name']}》 相关度{r['score']}\n{r['content']}")
         output = "\n\n".join(lines)
+        self.node_requests[node["id"]] = {
+            "request": {"query": query[:2000], "top_k": top_k},
+            "response": {"results": [{"doc": r.get("doc_name", ""), "score": r.get("score", 0), "content": r.get("content", "")[:500]} for r in results[:10]]},
+            "duration_ms": req_duration,
+            "type": "kb_search",
+        }
         self.variables[node["id"] + "_results"] = results  # 结构化结果
         self._store_output(node["id"], output)
         return output
@@ -397,10 +487,24 @@ class WorkflowEngine:
         query = render_template(config.get("query", ""), self.variables) or "SELECT 1"
         if not cid:
             raise RuntimeError("未选择数据连接器")
+        req_start = time.time()
         ok, result = connector_mod.query_connector(cid, query, limit=int(config.get("limit", 50) or 50))
+        req_duration = int((time.time() - req_start) * 1000)
         if not ok:
+            self.node_requests[node["id"]] = {
+                "request": {"connector_id": cid, "query": query[:2000]},
+                "response": {"error": result},
+                "duration_ms": req_duration,
+                "type": "connector",
+            }
             raise RuntimeError(f"连接器查询失败: {result}")
         output = result
+        self.node_requests[node["id"]] = {
+            "request": {"connector_id": cid, "query": query[:2000]},
+            "response": {"text": output[:2000]},
+            "duration_ms": req_duration,
+            "type": "connector",
+        }
         # 尝试解析为结构化列表
         try:
             if config.get("parse_json"):
@@ -468,6 +572,7 @@ class WorkflowEngine:
     def _execute_code(self, node, config):
         code = config.get("code", "")
         language = config.get("language", "python")
+        req_start = time.time()
 
         if language == "python":
             local_vars = {"variables": self.variables, "json": json, "math": __import__("math")}
@@ -475,10 +580,25 @@ class WorkflowEngine:
                 exec(code, {"__builtins__": {}}, local_vars)
                 self.variables = local_vars.get("variables", self.variables)
             except Exception as e:
+                req_duration = int((time.time() - req_start) * 1000)
+                self.node_requests[node["id"]] = {
+                    "request": {"language": language, "code": code[:2000]},
+                    "response": {"error": str(e)},
+                    "duration_ms": req_duration,
+                    "type": "code",
+                }
                 raise RuntimeError(f"代码执行错误: {e}")
 
+        req_duration = int((time.time() - req_start) * 1000)
         output_var = node["id"] + "_output"
-        return self.variables.get(output_var, "")
+        output = self.variables.get(output_var, "")
+        self.node_requests[node["id"]] = {
+            "request": {"language": language, "code": code[:2000]},
+            "response": {"text": str(output)[:2000]},
+            "duration_ms": req_duration,
+            "type": "code",
+        }
+        return output
 
     def _execute_http(self, node, config):
         url = render_template(config.get("url", ""), self.variables)
@@ -486,8 +606,10 @@ class WorkflowEngine:
         headers = config.get("headers", {})
         body = render_template(config.get("body", ""), self.variables) if config.get("body") else None
 
+        req_start = time.time()
         import httpx
         try:
+            req_body = {"url": url, "method": method, "headers": headers, "body": (body or "")[:2000]}
             if method.upper() == "GET":
                 resp = httpx.get(url, headers=headers, timeout=30)
             elif method.upper() == "POST":
@@ -499,10 +621,24 @@ class WorkflowEngine:
             else:
                 raise RuntimeError(f"不支持的HTTP方法: {method}")
             output = resp.text
+            req_duration = int((time.time() - req_start) * 1000)
+            self.node_requests[node["id"]] = {
+                "request": req_body,
+                "response": {"status": resp.status_code, "headers": dict(resp.headers), "body": resp.text[:2000]},
+                "duration_ms": req_duration,
+                "type": "http",
+            }
             self.variables[node["id"] + "_status"] = resp.status_code
             self._store_output(node["id"], output)
             return output
         except Exception as e:
+            req_duration = int((time.time() - req_start) * 1000)
+            self.node_requests[node["id"]] = {
+                "request": {"url": url, "method": method},
+                "response": {"error": str(e)},
+                "duration_ms": req_duration,
+                "type": "http",
+            }
             raise RuntimeError(f"HTTP请求失败: {e}")
 
     def _execute_text_process(self, node, config):
@@ -630,6 +766,7 @@ def execute_workflow(workflow_id, input_data=None):
         "completed_at": time.time(),
         "duration_ms": int((time.time() - execution["started_at"]) * 1000),
         "tokens_used": engine.tokens_used,
+        "node_requests": getattr(engine, "node_requests", {}),
     })
 
     db.save_workflow_execution(execution)
@@ -641,6 +778,7 @@ def execute_workflow(workflow_id, input_data=None):
         "error": result.get("error", ""),
         "duration_ms": execution["duration_ms"],
         "tokens_used": engine.tokens_used,
+        "node_requests": getattr(engine, "node_requests", {}),
     }
 
 
@@ -666,8 +804,106 @@ def list_workflows_summary():
             "description": wf.get("description", ""),
             "enabled": wf.get("enabled", True),
             "node_count": len(wf.get("nodes", [])),
+            "tags": wf.get("tags", []),
             "last_execution": last_exec,
             "created_at": wf.get("created_at"),
             "updated_at": wf.get("updated_at"),
         })
     return result
+
+
+def execute_workflow_stream(workflow_id, input_data=None):
+    """流式执行工作流（SSE事件生成器）"""
+    import json as _json
+    import time as _time
+
+    workflow = db.get_workflow(workflow_id)
+    if not workflow:
+        yield f"data: {_json.dumps({'error': '工作流不存在'}, ensure_ascii=False)}\n\n"
+        return
+
+    if not workflow.get("enabled", True):
+        yield f"data: {_json.dumps({'error': '工作流已禁用'}, ensure_ascii=False)}\n\n"
+        return
+
+    execution_id = str(int(_time.time() * 1000))
+    execution = {
+        "id": execution_id,
+        "workflow_id": workflow_id,
+        "input": input_data or {},
+        "status": "running",
+        "started_at": _time.time(),
+    }
+    db.save_workflow_execution(execution)
+
+    engine = WorkflowEngine(workflow)
+
+    # 设置流式事件回调
+    events_queue = []
+
+    def on_event(evt_type, data):
+        events_queue.append({"type": evt_type, "data": data})
+
+    engine.set_event_callback(on_event)
+
+    start_time = _time.time()
+    try:
+        # 异步执行引擎（在单独线程中）
+        import threading
+        result_holder = [None]
+        error_holder = [None]
+
+        def run_engine():
+            try:
+                result_holder[0] = engine.execute(input_data)
+            except Exception as e:
+                error_holder[0] = e
+
+        t = threading.Thread(target=run_engine, daemon=True)
+        t.start()
+
+        # 轮询事件并发送
+        while t.is_alive():
+            while events_queue:
+                evt = events_queue.pop(0)
+                yield f"data: {_json.dumps(evt, ensure_ascii=False)}\n\n"
+            _time.sleep(0.05)
+
+        # 排空剩余事件
+        while events_queue:
+            evt = events_queue.pop(0)
+            yield f"data: {_json.dumps(evt, ensure_ascii=False)}\n\n"
+
+        if error_holder[0]:
+            raise error_holder[0]
+
+        result = result_holder[0] or {"success": False, "error": "未知错误"}
+
+        # 保存执行记录
+        duration_ms = int((_time.time() - start_time) * 1000)
+        execution.update({
+            "output": result.get("output", ""),
+            "status": "completed" if result.get("success") else "failed",
+            "nodes_status": engine.nodes_status,
+            "error": result.get("error", ""),
+            "completed_at": _time.time(),
+            "duration_ms": duration_ms,
+            "tokens_used": engine.tokens_used,
+        })
+        db.save_workflow_execution(execution)
+
+        yield f"data: {_json.dumps({'done': True, 'duration_ms': duration_ms, 'tokens_used': engine.tokens_used, 'output': result.get('output', ''), 'node_results': engine.nodes_status}, ensure_ascii=False)}\n\n"
+
+    except Exception as e:
+        duration_ms = int((_time.time() - start_time) * 1000)
+        execution.update({
+            "output": "",
+            "status": "failed",
+            "nodes_status": engine.nodes_status,
+            "error": str(e),
+            "completed_at": _time.time(),
+            "duration_ms": duration_ms,
+            "tokens_used": engine.tokens_used,
+        })
+        db.save_workflow_execution(execution)
+        yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"

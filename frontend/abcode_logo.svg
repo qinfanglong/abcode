@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#6d28d9"/>
+      <stop offset="25%"  stop-color="#2563eb"/>
+      <stop offset="60%"  stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <radialGradient id="g2" cx="45%" cy="35%" r="55%">
+      <stop offset="0%"  stop-color="rgba(255,255,255,0.38)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <linearGradient id="g3" x1="50%" y1="78%" x2="50%" y2="100%">
+      <stop offset="0%"  stop-color="rgba(0,0,0,0)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.12)"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+    <filter id="glow" x="-18%" y="-18%" width="136%" height="136%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="b"/>
+      <feColorMatrix in="b" type="matrix"
+        values="0 0 0 0 0.15  0 0 0 0 0.45  0 0 0 0 0.95  0 0 0 0.38 0"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="ds" x="-8%" y="-8%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="8" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- ===== 气泡主体（不规则大圆角，底部小尾巴自然过渡） ===== -->
+  <g filter="url(#ds)">
+    <path d="
+      M256,20
+      C355,20 430,58 442,138
+      C454,208 444,290 415,328
+      C395,352 355,368 325,370
+      L190,370
+      Q155,372 130,408
+      Q105,444 72,500
+      Q92,458 112,428
+      Q132,398 148,380
+      Q162,368 178,362
+      L145,362
+      Q72,358 52,288
+      C32,215 38,128 88,72
+      C135,18 200,20 256,20
+      Z
+    " fill="url(#g1)" filter="url(#glow)"/>
+    <path d="
+      M256,20 C355,20 430,58 442,138 C454,208 444,290 415,328
+      C395,352 355,368 325,370 L190,370 Q155,372 130,408 Q105,444 72,500
+      Q92,458 112,428 Q132,398 148,380 Q162,368 178,362 L145,362
+      Q72,358 52,288 C32,215 38,128 88,72 C135,18 200,20 256,20 Z
+    " fill="url(#g2)"/>
+    <path d="
+      M256,20 C355,20 430,58 442,138 C454,208 444,290 415,328
+      C395,352 355,368 325,370 L190,370 Q155,372 130,408 Q105,444 72,500
+      Q92,458 112,428 Q132,398 148,380 Q162,368 178,362 L145,362
+      Q72,358 52,288 C32,215 38,128 88,72 C135,18 200,20 256,20 Z
+    " fill="url(#g3)"/>
+  </g>
+
+  <!-- ===== "AB" 文字 ===== -->
+  <text
+    x="255" y="235"
+    text-anchor="middle"
+    font-family="'Helvetica Neue','SF Pro Display','PingFang SC',Arial,sans-serif"
+    font-size="155"
+    font-weight="800"
+    fill="white"
+    letter-spacing="-4"
+  >AB</text>
+
+  <!-- ===== 笑脸弧（AB下方） ===== -->
+  <path
+    d="M175,280 Q255,345 335,280"
+    fill="none"
+    stroke="white"
+    stroke-width="8.5"
+    stroke-linecap="round"
+    opacity="0.92"
+  />
+</svg>

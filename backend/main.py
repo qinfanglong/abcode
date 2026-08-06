@@ -3,6 +3,8 @@ import json
 import os
 import time
 import uuid
+import random
+import string
 import mimetypes
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Body
@@ -209,6 +211,34 @@ def api_fetch_models(body: dict):
         return {"ok": False, "msg": f"HTTP {resp.status_code}", "models": []}
     except Exception as e:
         return {"ok": False, "msg": str(e), "models": []}
+
+
+@app.get("/api/ollama/models")
+def api_ollama_models(base_url: str = "http://localhost:11434"):
+    """获取本地 Ollama 模型列表"""
+    import httpx as _httpx
+    try:
+        resp = _httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            models = []
+            for m in data.get("models", []):
+                name = m.get("name", "")
+                size = m.get("size", 0)
+                details = m.get("details", {})
+                models.append({
+                    "name": name,
+                    "size": size,
+                    "size_gb": round(size / (1024**3), 1) if size else 0,
+                    "family": details.get("family", ""),
+                    "parameter_size": details.get("parameter_size", ""),
+                    "quantization": details.get("quantization_level", ""),
+                })
+            models.sort(key=lambda x: x["name"])
+            return {"ok": True, "models": models, "count": len(models)}
+        return {"ok": False, "msg": f"Ollama 返回 {resp.status_code}", "models": []}
+    except Exception as e:
+        return {"ok": False, "msg": f"无法连接 Ollama: {e}", "models": []}
 
 
 # ================= 团队协作 =================
@@ -1002,10 +1032,16 @@ def api_get_workflow(wid: str):
     return wf
 
 
+def _gen_wf_id(length=15):
+    """生成15位随机工作流ID（字母+数字）"""
+    chars = string.ascii_lowercase + string.digits
+    return "wf_" + "".join(random.choices(chars, k=length))
+
+
 @app.post("/api/workflows")
 def api_save_workflow(body: dict):
     """保存工作流（创建或更新）"""
-    wf_id = body.get("id") or f"wf_{int(time.time() * 1000)}"
+    wf_id = body.get("id") or _gen_wf_id()
     body["id"] = wf_id
     if not body.get("created_at"):
         body["created_at"] = time.time()
@@ -1033,9 +1069,40 @@ def api_delete_workflow(wid: str):
 @app.post("/api/workflows/{wid}/run")
 def api_run_workflow(wid: str, body: dict = Body(...)):
     """执行工作流"""
-    input_data = body.get("input", {})
+    input_data = dict(body.get("input", {}))
+    _merge_workflow_attachments(input_data, body.get("attachments"))
     result = workflow_mod.execute_workflow(wid, input_data)
     return result
+
+
+def _merge_workflow_attachments(input_data, attachments):
+    """把测试面板上传的附件(base64 data URL)注入工作流输入，供 LLM 节点做多模态"""
+    if not attachments:
+        return
+    existing = input_data.get("_attachments") or []
+    for att in attachments:
+        existing.append({
+            "name": att.get("name", ""),
+            "type": att.get("type", att.get("mime", "")),
+            "size": att.get("size", 0),
+            "data": att.get("data", ""),
+        })
+    input_data["_attachments"] = existing
+
+
+@app.post("/api/workflows/{wid}/run_stream")
+def api_run_workflow_stream(wid: str, body: dict = Body(...)):
+    """流式执行工作流（SSE）"""
+    input_data = dict(body.get("input", {}))
+    _merge_workflow_attachments(input_data, body.get("attachments"))
+
+    def gen():
+        try:
+            yield from workflow_mod.execute_workflow_stream(wid, input_data)
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'未知错误: {e}'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 @app.get("/api/workflows/{wid}/executions")
@@ -1086,7 +1153,7 @@ def api_use_workflow_template(tid: str):
     db.use_workflow_template(tid)
     
     # 从模板创建工作流
-    wf_id = f"wf_{int(time.time() * 1000)}"
+    wf_id = _gen_wf_id()
     wf = {
         "id": wf_id,
         "name": tpl["name"],

@@ -28,7 +28,7 @@
   <!-- 左侧边栏 -->
   <aside id="sidebar">
     <div class="brand">
-      <div class="brand-logo">AB</div>
+      <div class="brand-logo"><svg viewBox="0 0 512 512" style="width:100%;height:100%;overflow:hidden"><defs><linearGradient id="sb1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="40%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs><path d="M155,395 Q155,388 162,380 L256,105 Q260,95 264,105 L358,380 Q365,388 365,395" fill="none" stroke="url(#sb1)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/><line x1="188" y1="300" x2="332" y2="300" stroke="url(#sb1)" stroke-width="26" stroke-linecap="round"/><line x1="388" y1="110" x2="388" y2="395" stroke="url(#sb1)" stroke-width="44" stroke-linecap="round"/><path d="M388,110 L428,110 Q488,110 488,168 Q488,228 428,228 L388,228" fill="none" stroke="url(#sb1)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/><path d="M388,228 L438,228 Q505,228 505,310 Q505,395 438,395 L388,395" fill="none" stroke="url(#sb1)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="brand-text">
         <h1>ABcode</h1>
         <span>AI Agent Studio</span>
@@ -67,7 +67,7 @@
 
     <div id="chat-area">
       <div id="welcome" class="welcome">
-        <div class="welcome-logo">AB</div>
+        <div class="welcome-logo" style="max-width:120px;max-height:120px;"><svg viewBox="0 0 512 512" style="width:100%;height:100%;overflow:hidden"><defs><linearGradient id="wb1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="40%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs><path d="M130,420 Q130,410 140,398 L256,68 Q262,55 268,68 L384,398 Q394,410 394,420" fill="none" stroke="url(#wb1)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/><line x1="170" y1="310" x2="354" y2="310" stroke="url(#wb1)" stroke-width="32" stroke-linecap="round"/><line x1="420" y1="75" x2="420" y2="420" stroke="url(#wb1)" stroke-width="56" stroke-linecap="round"/><path d="M420,75 L468,75 Q540,75 540,150 Q540,228 468,228 L420,228" fill="none" stroke="url(#wb1)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><path d="M420,228 L478,228 Q555,228 555,322 Q555,420 478,420 L420,420" fill="none" stroke="url(#wb1)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><line x1="100" y1="455" x2="580" y2="455" stroke="url(#wb1)" stroke-width="3" stroke-linecap="round" opacity="0.3"/><text x="340" y="500" text-anchor="middle" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="58" font-weight="400" fill="url(#wb1)" letter-spacing="14" opacity="0.65">code</text><circle cx="95" cy="65" r="6" fill="#7c3aed" opacity="0.45"/><circle cx="118" cy="65" r="6" fill="#3b82f6" opacity="0.45"/><circle cx="141" cy="65" r="6" fill="#06b6d4" opacity="0.45"/></svg></div>
         <h2>你好，我是 ABcode</h2>
         <p>你的 AI Agent 工具 · 支持 DeepSeek / OpenAI / 通义 / Ollama 本地模型</p>
         <div class="welcome-tips">
@@ -234,78 +234,206 @@
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn-test" onclick="saveCurrentWorkflow()">💾 保存</button>
-            <button class="btn-save" onclick="runCurrentWorkflow()">▶ 运行</button>
+            <button class="btn-save" id="wf-test-toggle-btn" onclick="toggleTestPanel()">▶ 测试</button>
           </div>
         </div>
-        <!-- 节点工具栏 -->
-        <div id="wf-node-toolbar" style="padding:10px 20px; border-bottom:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap;">
-          <span class="wf-node-btn" data-type="start" title="开始节点">🏁 开始</span>
-          <span class="wf-node-btn" data-type="llm" title="LLM调用">🤖 LLM</span>
-          <span class="wf-node-btn" data-type="kb_search" title="知识库RAG检索">📚 知识检索</span>
-          <span class="wf-node-btn" data-type="classifier" title="意图分类路由">🎯 意图分类</span>
-          <span class="wf-node-btn" data-type="extractor" title="LLM参数提取">📑 参数提取</span>
-          <span class="wf-node-btn" data-type="tool" title="工具调用">🔧 工具</span>
-          <span class="wf-node-btn" data-type="connector" title="查询数据连接器">🗄️ 数据连接</span>
-          <span class="wf-node-btn" data-type="condition" title="条件分支">🔀 条件</span>
-          <span class="wf-node-btn" data-type="variable" title="变量操作">📝 变量</span>
-          <span class="wf-node-btn" data-type="text_process" title="文本处理">✂️ 文本处理</span>
-          <span class="wf-node-btn" data-type="aggregator" title="变量聚合">🧮 聚合</span>
-          <span class="wf-node-btn" data-type="code" title="代码执行">💻 代码</span>
-          <span class="wf-node-btn" data-type="http" title="HTTP请求">🌐 HTTP</span>
-          <span class="wf-node-btn" data-type="template" title="模板处理">📄 模板</span>
-          <span class="wf-node-btn" data-type="stop" title="直接回复/提前终止">🛑 直达</span>
-          <span class="wf-node-btn" data-type="end" title="结束节点">🏁 结束</span>
-        </div>
-        <!-- 画布区域 -->
-        <div id="wf-canvas-container" style="position:relative; height:500px; overflow:auto; background:var(--chat-bg);">
-          <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:2000px; height:2000px; pointer-events:none;"></svg>
-          <div id="wf-canvas" style="position:relative; width:2000px; height:2000px;">
-            <!-- 节点动态渲染 -->
+        <!-- 编辑器主体：左侧节点面板 + 画布 + 右侧测试面板 -->
+        <div style="display:flex; height:calc(100vh - 130px); overflow:hidden;">
+          <!-- 左侧节点面板 -->
+          <div id="wf-node-panel" style="width:220px; min-width:220px; border-right:1px solid var(--border); background:var(--input-bg); overflow-y:auto; padding:8px 0;">
+            <div id="wf-node-categories"></div>
           </div>
-        </div>
-        <!-- 节点配置面板 -->
-        <div id="wf-node-config" style="display:none; padding:16px 20px; border-top:1px solid var(--border); background:var(--input-bg); max-height:250px; overflow-y:auto;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <h4 id="wf-config-title" style="margin:0;">节点配置</h4>
-            <div style="display:flex; gap:8px;">
-              <button class="btn-test" onclick="deleteSelectedNode()" style="font-size:12px; color:#ef4444;">🗑 删除</button>
-              <button class="btn-test" onclick="closeNodeConfig()" style="font-size:12px;">✕ 关闭</button>
+          <!-- 中间画布 -->
+          <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+            <div id="wf-canvas-container" style="flex:1; position:relative; overflow:auto; background:var(--chat-bg);">
+              <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:4000px; height:4000px; pointer-events:none;"></svg>
+              <div id="wf-canvas" style="position:relative; width:4000px; height:4000px;"></div>
+            </div>
+            <!-- 连线选中浮动条 -->
+            <div id="wf-edge-toolbar" style="display:none; position:absolute; bottom:16px; left:50%; transform:translateX(-50%); background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:6px 14px; display:none; align-items:center; gap:10px; box-shadow:0 4px 16px rgba(0,0,0,0.12); z-index:20;">
+              <span id="wf-edge-info" style="font-size:12px; color:var(--text-secondary);">连线</span>
+              <button class="btn-test" onclick="deleteSelectedEdge()" style="font-size:12px; color:#ef4444; border-color:#fecaca;">🗑 删除</button>
+              <button class="btn-test" onclick="deselectEdge()" style="font-size:12px;">取消</button>
             </div>
           </div>
-          <div id="wf-config-content">
-            <!-- 动态填充 -->
+          <!-- 右侧测试面板 -->
+          <div id="wf-test-panel" style="overflow:hidden; border-left:1px solid var(--border); background:var(--input-bg); transition:width 0.25s, min-width 0.25s; display:flex; flex-direction:column;">
+            <div id="wf-test-panel-inner" style="width:380px; min-width:380px; display:flex; flex-direction:column; height:100%;">
+              <!-- 测试面板头部 -->
+              <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--card-bg);">
+                <span style="font-weight:700; font-size:14px;">🧪 测试工作流</span>
+                <button class="btn-test" onclick="toggleTestPanel()" style="padding:3px 8px; font-size:12px;">✕</button>
+              </div>
+              <!-- 输入区 -->
+              <div id="wf-test-input-area" style="flex:1; overflow-y:auto; padding:12px 16px;">
+                <div id="wf-test-fields-container"></div>
+                <!-- 变量定义 -->
+                <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+                  <div style="font-size:12px; font-weight:600; margin-bottom:8px; color:var(--text-secondary);">📝 环境变量</div>
+                  <div id="wf-test-vars"></div>
+                  <button class="btn-test" onclick="addTestVar()" style="font-size:11px; margin-top:6px;">+ 添加变量</button>
+                </div>
+                <!-- 文件上传 -->
+                <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+                  <div style="font-size:12px; font-weight:600; margin-bottom:8px; color:var(--text-secondary);">📎 附件（多模态）</div>
+                  <div id="wf-test-file-drop" style="border:2px dashed var(--border); border-radius:8px; padding:16px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--input-bg);"
+                       onclick="$('#wf-test-file-input').click()"
+                       ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'"
+                       ondragleave="this.style.borderColor='var(--border)'"
+                       ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; handleWfTestFiles(event.dataTransfer.files)">
+                    <div style="font-size:22px; margin-bottom:4px;">📎</div>
+                    <div style="font-size:11px; color:var(--text-secondary);">拖拽或 <span style="color:var(--primary); font-weight:600;">点击选择</span></div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">txt/pdf/docx/md/json/csv/图片/音频/视频</div>
+                  </div>
+                  <input type="file" id="wf-test-file-input" multiple style="display:none" onchange="handleWfTestFiles(this.files)">
+                  <div id="wf-test-file-list" style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;"></div>
+                </div>
+                <!-- 快捷操作 -->
+                <div style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap;">
+                  <button class="btn-test" onclick="loadWfTestPreset('hello')" style="font-size:11px;">👋 Hello</button>
+                  <button class="btn-test" onclick="loadWfTestPreset('json')" style="font-size:11px;">📋 JSON</button>
+                  <button class="btn-test" onclick="loadWfTestPreset('empty')" style="font-size:11px;">🗑 清空</button>
+                </div>
+              </div>
+              <!-- 运行按钮 -->
+              <div style="padding:10px 16px; border-top:1px solid var(--border); background:var(--card-bg);">
+                <div id="wf-test-status" style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">就绪</div>
+                <button id="wf-test-run-btn" onclick="executeWfTest()" style="width:100%; padding:8px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer;">▶ 运行测试</button>
+              </div>
+              <!-- 输出区 -->
+              <div id="wf-test-output-area" style="border-top:1px solid var(--border); max-height:45%; overflow-y:auto; display:none;">
+                <div style="padding:10px 16px; border-bottom:1px solid var(--border); font-size:12px; font-weight:600; color:var(--text-secondary);">📊 输出结果</div>
+                <div id="wf-test-output-content" style="padding:12px 16px;"></div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      
-      <!-- 模板库视图 -->
-      <div id="wf-templates-view" style="display:none;">
-        <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-          <div style="display:flex; gap:8px;">
-            <button class="btn-test" onclick="switchWfView('list')">← 返回</button>
-          </div>
-          <div class="wf-template-tabs">
-            <button class="wf-tab active" data-cat="all" onclick="filterWfTemplates('all')">全部</button>
-            <button class="wf-tab" data-cat="basic" onclick="filterWfTemplates('basic')">基础</button>
-            <button class="wf-tab" data-cat="advanced" onclick="filterWfTemplates('advanced')">高级</button>
-            <button class="wf-tab" data-cat="coding" onclick="filterWfTemplates('coding')">编程</button>
-            <button class="wf-tab" data-cat="writing" onclick="filterWfTemplates('writing')">写作</button>
-          </div>
-        </div>
-        <div id="wf-templates-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
-          <!-- 动态填充 -->
-        </div>
-      </div>
-      
-      <!-- 运行结果面板 -->
-      <div id="wf-run-result" style="display:none; padding:16px 20px; border-top:1px solid var(--border); background:var(--input-bg); max-height:300px; overflow-y:auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h4 style="margin:0;">运行结果</h4>
-          <button class="btn-test" onclick="$('#wf-run-result').style.display='none'" style="font-size:12px;">✕ 关闭</button>
-        </div>
-        <div id="wf-run-output"></div>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="node-config-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:680px; max-height:85vh;">
+    <div class="modal-header">
+      <h2 id="ncf-title">节点配置</h2>
+      <button class="modal-close" onclick="closeNodeConfigModal()">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto; max-height:calc(85vh - 120px);">
+      <div class="ncf-section">
+        <div class="ncf-row" style="display:flex; gap:12px;">
+          <div style="flex:1"><label class="ncf-label">节点 ID</label><input id="ncf-id" class="ncf-input" onchange="updateNodeField('id', this.value)"></div>
+          <div style="flex:1"><label class="ncf-label">显示名称</label><input id="ncf-label" class="ncf-input" onchange="updateNodeField('label', this.value)"></div>
+        </div>
+      </div>
+      <div id="ncf-type-config"></div>
+      <div class="ncf-section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <label class="ncf-label">可用变量（点击插入）</label>
+        <div id="ncf-var-chips" class="ncf-var-chips"></div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:space-between; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="deleteSelectedNode()" style="color:#ef4444; border-color:#fecaca;">🗑 删除节点</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-test" onclick="closeNodeConfigModal()">取消</button>
+        <button class="btn-save" onclick="closeNodeConfigModal()">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 工作流测试弹窗 -->
+<div id="wf-test-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:720px; max-height:90vh;">
+    <div class="modal-header">
+      <h2>🧪 测试工作流</h2>
+      <button class="modal-close" onclick="closeWfTestModal()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:calc(90vh - 130px); overflow-y:auto;">
+      <div class="ncf-section">
+        <div class="ncf-group-title">输入参数</div>
+        <div id="wf-test-input-fields"></div>
+        <div class="ncf-row">
+          <label class="ncf-label">附件（可选）</label>
+          <div id="wf-test-file-drop" style="border:2px dashed var(--border); border-radius:10px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--input-bg);"
+               onclick="$('#wf-test-file-input').click()"
+               ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'"
+               ondragleave="this.style.borderColor='var(--border)'"
+               ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; handleWfTestFiles(event.dataTransfer.files)">
+            <div style="font-size:28px; margin-bottom:6px;">📎</div>
+            <div style="font-size:13px; color:var(--text-secondary);">拖拽文件到此处，或 <span style="color:var(--primary); font-weight:600;">点击选择</span></div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">支持 txt / pdf / docx / md / json / csv / 图片</div>
+          </div>
+          <input type="file" id="wf-test-file-input" multiple accept=".txt,.pdf,.docx,.md,.json,.csv,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="handleWfTestFiles(this.files)">
+          <div id="wf-test-file-list" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+        </div>
+      </div>
+      <div class="ncf-section">
+        <div class="ncf-group-title">快捷操作</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-test" onclick="loadWfTestPreset('hello')" style="font-size:12px;">👋 Hello</button>
+          <button class="btn-test" onclick="loadWfTestPreset('json')" style="font-size:12px;">📋 JSON</button>
+          <button class="btn-test" onclick="loadWfTestPreset('empty')" style="font-size:12px;">🗑 清空</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:space-between; padding:12px 20px; border-top:1px solid var(--border);">
+      <div style="font-size:12px; color:var(--text-muted);" id="wf-test-status">就绪</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-test" onclick="closeWfTestModal()">取消</button>
+        <button class="btn-save" id="wf-test-run-btn" onclick="executeWfTest()">▶ 运行测试</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 测试结果弹窗 -->
+<div id="wf-result-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:700px; max-height:85vh;">
+    <div class="modal-header">
+      <h2 id="wf-result-title">📊 测试结果</h2>
+      <button class="modal-close" onclick="closeModal('wf-result-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:calc(85vh - 100px); overflow-y:auto;">
+      <div id="wf-result-content"></div>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="closeModal('wf-result-modal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 请求观测弹窗 -->
+<div id="wf-obs-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:800px; max-width:95vw; max-height:85vh;">
+    <div class="modal-header">
+      <h2 id="wf-obs-title">👁 请求观测</h2>
+      <button class="modal-close" onclick="closeModal('wf-obs-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="wf-obs-content" style="max-height:calc(85vh - 100px); overflow-y:auto;">
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="closeModal('wf-obs-modal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 模板库视图 -->
+<div id="wf-templates-view" style="display:none;">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+    <div style="display:flex; gap:8px;">
+      <button class="btn-test" onclick="switchWfView('list')">← 返回</button>
+    </div>
+    <div class="wf-template-tabs">
+      <button class="wf-tab active" data-cat="all" onclick="filterWfTemplates('all')">全部</button>
+      <button class="wf-tab" data-cat="basic" onclick="filterWfTemplates('basic')">基础</button>
+      <button class="wf-tab" data-cat="advanced" onclick="filterWfTemplates('advanced')">高级</button>
+      <button class="wf-tab" data-cat="coding" onclick="filterWfTemplates('coding')">编程</button>
+      <button class="wf-tab" data-cat="writing" onclick="filterWfTemplates('writing')">写作</button>
+    </div>
+  </div>
+  <div id="wf-templates-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
+    <!-- 动态填充 -->
   </div>
 </div>
 
