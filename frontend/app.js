@@ -3964,7 +3964,7 @@ function getDefaultNodeConfig(type) {
     case "start": return { input_fields: ["input"] };
     case "end": return { output_field: "output", result_template: "" };
     case "llm": return { prompt: "", model: "", model_source: "local", system: "", temperature: 0.7, memory_mode: "none", output_variable: "", retry: false };
-    case "kb_search": return { query: "{{input}}", top_k: 5, kb_id: "", score_threshold: 0.6 };
+    case "kb_search": return { query: "{{input}}", top_k: 5, kb_id: "", threshold: 0, output_variable: "" };
     case "kb_index": return { kb_id: "", documents: [], mode: "append" };
     case "classifier": return { input: "{{input}}", categories: [], prompt: "", model: "" };
     case "extractor": return { input: "{{input}}", fields: [], prompt: "", model: "" };

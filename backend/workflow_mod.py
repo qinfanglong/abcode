@@ -391,7 +391,7 @@ class WorkflowEngine:
         query = render_template(config.get("query", ""), self.variables) or str(self.variables.get("input", ""))
         top_k = int(config.get("top_k", 5) or 5)
         kb_id = config.get("kb_id") or None
-        threshold = float(config.get("threshold", 0) or 0)
+        threshold = float(config.get("threshold", 0) or config.get("score_threshold", 0) or 0)
         req_start = time.time()
         results = rag.search(query, top_k=top_k, kb_id=kb_id, min_score=threshold)
         req_duration = int((time.time() - req_start) * 1000)
@@ -406,7 +406,10 @@ class WorkflowEngine:
             "duration_ms": req_duration,
             "type": "kb_search",
         }
-        self.variables[node["id"] + "_results"] = results  # 结构化结果
+        # 结构化结果变量名：优先用面板配置的 output_variable，否则兼容默认 node_id_results
+        out_var = (config.get("output_variable") or "").strip() or (node["id"] + "_results")
+        self.variables[out_var] = results
+        self.variables[node["id"] + "_results"] = results  # 兼容旧工作流
         self._store_output(node["id"], output)
         return output
 
