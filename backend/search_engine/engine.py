@@ -1,118 +1,178 @@
 """
-轻量搜索引擎 - 支持 Bing/百度/DuckDuckGo
-使用 requests 库，兼容性更好
+ABcode 轻量搜索引擎 - 支持 Bing/百度/搜狗/DuckDuckGo
+针对国内网络环境优化，超时快速跳过，不阻塞
 """
 import re
-import requests
+import time
+import concurrent.futures
 from urllib.parse import quote_plus
 from html import unescape
 
+import requests
 
+
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+HEADERS = {"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
+
+
+# ==================== Bing ====================
 def search_bing(query: str, max_results: int = 10) -> list:
-    """通过 Bing 搜索"""
     url = f"https://www.bing.com/search?q={quote_plus(query)}&count={max_results}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        return _parse_bing_html(resp.text, max_results)
+        resp = requests.get(url, headers=HEADERS, timeout=8)
+        resp.raise_for_status()
+        return _parse_bing(resp.text, max_results)
     except Exception as e:
-        return [{"error": str(e)}]
+        return [{"error": f"Bing: {e}"}]
 
 
-def _parse_bing_html(html: str, max_results: int) -> list:
+def _parse_bing(html: str, max_results: int) -> list:
     results = []
-    # 提取搜索结果 - 处理新的 Bing HTML 结构
-    pattern = r'<li class="b_algo"[^>]*>(.*?)</li>'
-    matches = re.findall(pattern, html, re.DOTALL)
-    for match in matches[:max_results]:
-        # 提取链接和标题 - 处理嵌套结构
-        link_pattern = r'<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>'
-        link_matches = re.findall(link_pattern, match, re.DOTALL)
-        if link_matches:
-            # 取第一个有效链接
-            url, title = link_matches[0]
-            title = re.sub(r'<[^>]+>', '', title).strip()
-            if title and url:
-                # 提取摘要
-                snippet = ""
-                snippet_pattern = r'<p[^>]*>(.*?)</p>'
-                snippet_match = re.search(snippet_pattern, match, re.DOTALL)
-                if snippet_match:
-                    snippet = re.sub(r'<[^>]+>', '', snippet_match.group(1)).strip()
-                results.append({
-                    "title": unescape(title),
-                    "url": unescape(url),
-                    "snippet": unescape(snippet)
-                })
+    for m in re.finditer(r'<li class="b_algo"[^>]*>(.*?)</li>', html, re.S):
+        if len(results) >= max_results:
+            break
+        block = m.group(1)
+        link = re.search(r'<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not link:
+            continue
+        url, title = link.group(1), re.sub(r'<[^>]+>', '', link.group(2)).strip()
+        snippet = ""
+        sp = re.search(r'<p[^>]*>(.*?)</p>', block, re.S)
+        if sp:
+            snippet = re.sub(r'<[^>]+>', '', sp.group(1)).strip()[:200]
+        if title and url:
+            results.append({"title": unescape(title), "url": unescape(url), "snippet": snippet})
     return results
 
 
+# ==================== 百度 ====================
 def search_baidu(query: str, max_results: int = 10) -> list:
-    """通过百度搜索"""
     url = f"https://www.baidu.com/s?wd={quote_plus(query)}&rn={max_results}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    }
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        return _parse_baidu_html(resp.text, max_results)
+        resp = requests.get(url, headers=HEADERS, timeout=8)
+        resp.raise_for_status()
+        return _parse_baidu(resp.text, max_results)
     except Exception as e:
-        return [{"error": str(e)}]
+        return [{"error": f"Baidu: {e}"}]
 
 
-def _parse_baidu_html(html: str, max_results: int) -> list:
+def _parse_baidu(html: str, max_results: int) -> list:
     results = []
-    # 百度结果提取
-    pattern = r'<h3[^>]*>.*?<a href="([^"]+)"[^>]*>(.*?)</a>'
-    matches = re.findall(pattern, html, re.DOTALL)
-    for url, title in matches[:max_results]:
-        title_clean = re.sub(r'<[^>]+>', '', title)
-        results.append({
-            "title": unescape(title_clean),
-            "url": unescape(url),
-            "snippet": ""
-        })
+    # 尝试多种模式
+    patterns = [
+        r'<h3[^>]*>.*?<a href="([^"]+)"[^>]*>(.*?)</a>',
+        r'<h3 class="t"[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
+    ]
+    for pat in patterns:
+        for url, title in re.findall(pat, html, re.S)[:max_results]:
+            title_clean = re.sub(r'<[^>]+>', '', title).strip()
+            if title_clean and url.startswith("http"):
+                results.append({"title": unescape(title_clean), "url": unescape(url), "snippet": ""})
+        if results:
+            break
+    return results[:max_results]
+
+
+# ==================== 搜狗 ====================
+def search_sogou(query: str, max_results: int = 10) -> list:
+    url = f"https://www.sogou.com/web?query={quote_plus(query)}"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=8)
+        resp.raise_for_status()
+        return _parse_sogou(resp.text, max_results)
+    except Exception as e:
+        return [{"error": f"Sogou: {e}"}]
+
+
+def _parse_sogou(html: str, max_results: int) -> list:
+    results = []
+    for m in re.finditer(r'<h3[^>]*>.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S):
+        if len(results) >= max_results:
+            break
+        url, title = m.group(1), re.sub(r'<[^>]+>', '', m.group(2)).strip()
+        if title and url.startswith("http"):
+            results.append({"title": unescape(title), "url": unescape(url), "snippet": ""})
     return results
 
 
-def search_duckduckgo(query: str, max_results: int = 10) -> list:
-    """通过 DuckDuckGo Lite 搜索"""
-    url = "https://lite.duckduckgo.com/lite/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    }
-    data = {"q": query}
+# ==================== DuckDuckGo ====================
+def search_ddg(query: str, max_results: int = 10) -> list:
     try:
-        resp = requests.post(url, headers=headers, data=data, timeout=15)
-        return _parse_ddg_lite_html(resp.text, max_results)
+        resp = requests.post(
+            "https://html.duckduckgo.com/html/",
+            data={"q": query},
+            headers=HEADERS,
+            timeout=8,
+        )
+        resp.raise_for_status()
+        return _parse_ddg(resp.text, max_results)
     except Exception as e:
-        return [{"error": str(e)}]
+        return [{"error": f"DDG: {e}"}]
 
 
-def _parse_ddg_lite_html(html: str, max_results: int) -> list:
+def _parse_ddg(html: str, max_results: int) -> list:
     results = []
-    # DuckDuckGo Lite 结果提取
-    pattern = r'<a[^>]+rel="nofollow"[^>]+href="([^"]+)"[^>]*>(.*?)</a>'
-    matches = re.findall(pattern, html, re.DOTALL)
-    for url, title in matches[:max_results]:
-        if url.startswith("http") and "duckduckgo" not in url:
-            title_clean = re.sub(r'<[^>]+>', '', title)
-            results.append({
-                "title": unescape(title_clean),
-                "url": unescape(url),
-                "snippet": ""
-            })
+    for m in re.finditer(
+        r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?'
+        r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
+        html, re.S,
+    ):
+        if len(results) >= max_results:
+            break
+        href = m.group(1)
+        if href.startswith("//"):
+            href = "https:" + href
+        title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+        snippet = re.sub(r'<[^>]+>', '', m.group(3)).strip()[:200]
+        if title and "duckduckgo" not in href:
+            results.append({"title": unescape(title), "url": href, "snippet": snippet})
     return results
+
+
+# ==================== 引擎注册表 ====================
+ENGINES = {
+    "bing": search_bing,
+    "baidu": search_baidu,
+    "sogou": search_sogou,
+    "duckduckgo": search_ddg,
+}
 
 
 def search(query: str, engine: str = "bing", max_results: int = 10) -> list:
-    """统一搜索接口"""
-    engines = {
-        "bing": search_bing,
-        "baidu": search_baidu,
-        "duckduckgo": search_duckduckgo,
-    }
-    search_fn = engines.get(engine, search_bing)
-    return search_fn(query, max_results)
+    """单引擎搜索"""
+    fn = ENGINES.get(engine, search_bing)
+    return fn(query, max_results)
+
+
+def search_multi(query: str, engines: list = None, max_results: int = 10,
+                 timeout: int = 8) -> list:
+    """多引擎并发搜索，自动去重、跳过超时引擎"""
+    if not engines:
+        engines = ["baidu", "bing", "sogou"]
+    all_results = []
+    seen = set()
+
+    def _run(eng_name):
+        fn = ENGINES.get(eng_name)
+        if not fn:
+            return []
+        try:
+            return fn(query, max_results)
+        except Exception:
+            return []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(engines)) as pool:
+        futures = {pool.submit(_run, e): e for e in engines}
+        done, _ = concurrent.futures.wait(futures, timeout=timeout)
+        for f in done:
+            try:
+                for r in f.result(timeout=0):
+                    url = r.get("url", "")
+                    if url and url not in seen and "error" not in r:
+                        seen.add(url)
+                        all_results.append(r)
+            except Exception:
+                pass
+
+    return all_results[:max_results]

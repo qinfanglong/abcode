@@ -28,7 +28,10 @@
   <!-- 左侧边栏 -->
   <aside id="sidebar">
     <div class="brand">
-      <div class="brand-logo"><svg viewBox="0 0 512 512" style="width:100%;height:100%;overflow:hidden"><defs><linearGradient id="sb1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="40%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs><path d="M155,395 Q155,388 162,380 L256,105 Q260,95 264,105 L358,380 Q365,388 365,395" fill="none" stroke="url(#sb1)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/><line x1="188" y1="300" x2="332" y2="300" stroke="url(#sb1)" stroke-width="26" stroke-linecap="round"/><line x1="388" y1="110" x2="388" y2="395" stroke="url(#sb1)" stroke-width="44" stroke-linecap="round"/><path d="M388,110 L428,110 Q488,110 488,168 Q488,228 428,228 L388,228" fill="none" stroke="url(#sb1)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/><path d="M388,228 L438,228 Q505,228 505,310 Q505,395 438,395 L388,395" fill="none" stroke="url(#sb1)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="brand-logo-wrap">
+        <div class="brand-logo"><svg viewBox="0 0 512 512" style="width:100%;height:100%;overflow:hidden"><defs><linearGradient id="sb1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="40%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs><path d="M155,395 Q155,388 162,380 L256,105 Q260,95 264,105 L358,380 Q365,388 365,395" fill="none" stroke="url(#sb1)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/><line x1="188" y1="300" x2="332" y2="300" stroke="url(#sb1)" stroke-width="26" stroke-linecap="round"/><line x1="388" y1="110" x2="388" y2="395" stroke="url(#sb1)" stroke-width="44" stroke-linecap="round"/><path d="M388,110 L428,110 Q488,110 488,168 Q488,228 428,228 L388,228" fill="none" stroke="url(#sb1)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/><path d="M388,228 L438,228 Q505,228 505,310 Q505,395 438,395 L388,395" fill="none" stroke="url(#sb1)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <button id="thinking-toggle" class="thinking-toggle" title="思考模式：开启 / 关闭">?</button>
+      </div>
       <div class="brand-text">
         <h1>ABcode</h1>
         <span>AI Agent Studio</span>
@@ -37,6 +40,7 @@
     <button id="new-chat-btn" class="btn-new-chat">＋ 新建会话</button>
     <div id="conv-list" class="conv-list"></div>
     <div class="sidebar-footer">
+      <button id="agent-btn" class="btn-sidebar">🤖 智能体</button>
       <button id="team-btn" class="btn-sidebar">👥 团队协作</button>
       <button id="expert-btn" class="btn-sidebar">🎯 专家套件</button>
       <button id="workflow-btn" class="btn-sidebar">⚡ 工作流</button>
@@ -54,12 +58,27 @@
       <div id="conv-title">新对话</div>
       <div class="topbar-right">
         <div class="theme-switcher">
-          <button class="theme-btn active" data-theme="light" title="亮色主题">☀️</button>
-          <button class="theme-btn" data-theme="dark" title="暗色主题">🌙</button>
-          <button class="theme-btn" data-theme="sepia" title="护眼主题">📜</button>
+          <select id="theme-select" title="切换主题">
+            <option value="light">☀️ 亮色</option>
+            <option value="dark">🌙 暗色</option>
+            <option value="sepia">📜 护眼</option>
+            <option value="cartoon">🏞️ 卡通风景</option>
+          </select>
         </div>
+        <button id="compress-btn" class="btn-convtools" title="压缩当前会话（将长历史总结为摘要）">🗜️</button>
         <button id="convtools-btn" class="btn-convtools" title="本会话工具配置">🔧</button>
+        <div class="tb-toggles" title="功能开关：知识库 / 技能 / MCP / 思考模式">
+          <button class="tb-toggle active" data-tb="kb" title="知识库 RAG">📚</button>
+          <button class="tb-toggle active" data-tb="skills" title="技能 Skills">🧩</button>
+          <button class="tb-toggle active" data-tb="mcp" title="MCP 服务器">🔌</button>
+          <button class="tb-toggle" data-tb="thinking" title="思考模式">🧠</button>
+        </div>
         <label class="switch-label"><input type="checkbox" id="agent-switch" checked> Agent</label>
+        <div class="model-type-toggle" id="model-type-toggle">
+          <button class="model-type-btn active" data-type="all" title="全部模型">🌐 全部</button>
+          <button class="model-type-btn" data-type="local" title="本地模型 (Ollama)">🏠 本地</button>
+          <button class="model-type-btn" data-type="network" title="网络模型">☁️ 网络</button>
+        </div>
         <select id="provider-select" title="选择供应商"></select>
         <select id="model-select" title="选择模型"></select>
       </div>
@@ -88,28 +107,132 @@
         <div class="dot-pulse"><span></span><span></span><span></span></div>
         <span id="streaming-text">正在思考...</span>
       </div>
-      <div class="input-toolbar">
-        <button class="tb-toggle active" data-tb="kb" title="知识库检索（RAG）">📚 知识库</button>
-        <button class="tb-toggle active" data-tb="skills" title="启用技能插件">🧩 Skills</button>
-        <button class="tb-toggle active" data-tb="mcp" title="启用 MCP 服务器">🔌 MCP</button>
-        <button class="tb-toggle" data-tb="thinking" title="显示思考过程">💭 思考</button>
+      <div id="send-queue" class="send-queue" style="display:none"></div>
+      <div id="send-choice" class="send-choice" style="display:none">
+        <span class="send-choice-tip">正在生成回复，如何处理这条消息？</span>
+        <div class="send-choice-btns">
+          <button id="sc-queue-btn">⏳ 排队发送</button>
+          <button id="sc-preempt-btn">⚡ 抢断发送</button>
+          <button id="sc-cancel-btn">✕</button>
+        </div>
       </div>
       <div class="input-row">
-        <button id="attach-btn" class="icon-btn" title="上传图片/视频/文件">📎</button>
-        <button id="kb-ref-btn" class="icon-btn kb-ref" title="引用知识库（Ctrl+K）">📚</button>
-        <button id="voice-btn" class="icon-btn" title="语音输入（按住说话）">🎤</button>
-        <textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
-        <button id="send-btn" title="发送">➤</button>
-        <button id="stop-btn" title="停止生成" style="display:none">■</button>
+        <textarea id="chat-input" placeholder="" rows="1"></textarea>
+      </div>
+      <div class="input-bottom">
+        <div class="input-bottom-left">
+          <select id="input-model-select" class="input-model-select" title="选择模型"></select>
+          <button id="voice-btn" class="icon-btn" title="语音输入（按住说话）">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          </button>
+          <button id="attach-btn" class="icon-btn" title="上传图片/视频/文件">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          </button>
+          <button id="emoji-btn" class="icon-btn" title="表情">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+          </button>
+          <button id="mode-selector-btn" class="mode-selector-btn">
+            <span id="mode-label">默认</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4L5 7L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="input-bottom-right">
+          <span id="char-count" class="char-count">0/10000</span>
+          <div id="loading-indicator" class="loading-indicator" style="display:none">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10" /></svg>
+          </div>
+          <button id="close-mode-btn" class="close-mode-btn" onclick="toggleCloseMode()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span>关闭模式</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4L5 7L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="send-btn" title="发送">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+          <button id="stop-btn" title="停止生成" style="display:none">■</button>
+        </div>
         <input type="file" id="file-input" accept="image/*,video/*,audio/*,.txt,.md,.pdf,.json,.csv" style="display:none" multiple>
       </div>
-      <!-- 知识库引用搜索面板 -->
-      <div id="kb-ref-panel" class="kb-ref-panel" style="display:none">
-        <div class="kb-ref-search">
-          <input id="kb-ref-input" placeholder="搜索知识库..." autocomplete="off">
-          <button id="kb-ref-close" class="kb-ref-close">✕</button>
+      <!-- Loop 模式选择面板 -->
+      <div id="mode-popup" class="mode-popup" style="display:none">
+        <div class="mode-popup-header">
+          <div>
+            <div class="mode-popup-title">Loop 模式</div>
+            <div class="mode-popup-desc">选择智能体接下来的工作方式</div>
+          </div>
+          <button class="mode-popup-close" onclick="closeModePopup()">✕</button>
         </div>
-        <div id="kb-ref-results" class="kb-ref-results"></div>
+        <div class="mode-popup-section">
+          <div class="mode-popup-section-title">内置</div>
+          <div class="mode-option" data-mode="default" onclick="selectMode('default')">
+            <div class="mode-option-icon">🎯</div>
+            <div class="mode-option-content">
+              <div class="mode-option-name">默认</div>
+              <div class="mode-option-desc">标准的受控智能体 Loop。</div>
+            </div>
+            <div class="mode-option-check" id="mode-check-default">✓</div>
+          </div>
+          <div class="mode-option" data-mode="goal" onclick="selectMode('goal')">
+            <div class="mode-option-icon">🔭</div>
+            <div class="mode-option-content">
+              <div class="mode-option-name">目标</div>
+              <div class="mode-option-desc">持续推进一个具体且可验证的目标。</div>
+            </div>
+            <div class="mode-option-check" id="mode-check-goal"></div>
+          </div>
+          <div class="mode-option" data-mode="task" onclick="selectMode('task')">
+            <div class="mode-option-icon">⚡</div>
+            <div class="mode-option-content">
+              <div class="mode-option-name">任务</div>
+              <div class="mode-option-desc">运行结构化、可持续的多步骤任务。</div>
+            </div>
+            <div class="mode-option-check" id="mode-check-task"></div>
+          </div>
+        </div>
+      </div>
+      <!-- 关闭模式选择面板 -->
+      <div id="close-mode-popup" class="mode-popup" style="display:none">
+        <div class="mode-popup-header">
+          <div>
+            <div class="mode-popup-title" id="close-mode-title">关闭模式</div>
+            <div class="mode-popup-desc" id="close-mode-desc">关闭所有工具审批，所有工具自动执行</div>
+          </div>
+          <button class="mode-popup-close" onclick="closeCloseModePopup()">✕</button>
+        </div>
+        <div class="mode-popup-section">
+          <div class="close-mode-option" data-close-mode="strict" onclick="selectCloseMode('strict')">
+            <div class="close-mode-option-icon">⛔</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">严格模式</div>
+              <div class="close-mode-option-desc">所有工具调用都需要审批，最高安全级别</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-strict"></div>
+          </div>
+          <div class="close-mode-option" data-close-mode="smart" onclick="selectCloseMode('smart')">
+            <div class="close-mode-option-icon">⚠️</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">智能模式</div>
+              <div class="close-mode-option-desc">低风险工具自动放行，中高风险工具需要审批</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-smart"></div>
+          </div>
+          <div class="close-mode-option" data-close-mode="auto" onclick="selectCloseMode('auto')">
+            <div class="close-mode-option-icon">🔵</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">自动模式</div>
+              <div class="close-mode-option-desc">仅被明确标记为需要审批的工具才会要求审批（默认）</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-auto"></div>
+          </div>
+          <div class="close-mode-option active" data-close-mode="off" onclick="selectCloseMode('off')">
+            <div class="close-mode-option-icon">✅</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">关闭模式</div>
+              <div class="close-mode-option-desc">关闭所有工具审批，所有工具自动执行</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-off">✓</div>
+          </div>
+        </div>
       </div>
     </footer>
   </main>
@@ -152,6 +275,44 @@
         </div>
         <div id="team-activity-tab" class="team-tab-panel" style="display:none">
           <div id="team-activity-list" class="team-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 智能体弹窗 -->
+<div id="agent-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:960px; max-width:95vw; max-height:90vh;">
+    <div class="modal-header">
+      <h2>🤖 智能体</h2>
+      <button class="modal-close" onclick="closeModal('agent-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0; display:flex; max-height:calc(90vh - 60px); overflow:hidden;">
+      <!-- 左侧列表 -->
+      <div style="width:300px; min-width:300px; border-right:1px solid var(--border); display:flex; flex-direction:column;">
+        <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;" id="agent-cat-tabs">
+            <button class="agent-cat-tab active" data-cat="all">全部</button>
+            <button class="agent-cat-tab" data-cat="coding">编程</button>
+            <button class="agent-cat-tab" data-cat="research">研究</button>
+            <button class="agent-cat-tab" data-cat="analysis">分析</button>
+            <button class="agent-cat-tab" data-cat="product">产品</button>
+            <button class="agent-cat-tab" data-cat="writing">写作</button>
+            <button class="agent-cat-tab" data-cat="security">安全</button>
+            <button class="agent-cat-tab" data-cat="language">语言</button>
+          </div>
+        </div>
+        <div style="padding:10px 16px; border-bottom:1px solid var(--border);">
+          <button class="btn-save" onclick="openAgentForm(null)" style="width:100%;">＋ 新建智能体</button>
+        </div>
+        <div id="agent-list" style="flex:1; overflow-y:auto; padding:8px;"></div>
+      </div>
+      <!-- 右侧详情/编辑 -->
+      <div id="agent-detail-panel" style="flex:1; overflow-y:auto; padding:20px; background:var(--card-bg);">
+        <div style="text-align:center; color:var(--text-muted); margin-top:80px;">
+          <div style="font-size:48px;">🤖</div>
+          <p style="margin-top:12px;">选择左侧智能体查看详情，或新建一个智能体</p>
         </div>
       </div>
     </div>
@@ -256,54 +417,59 @@
               <button class="btn-test" onclick="deselectEdge()" style="font-size:12px;">取消</button>
             </div>
           </div>
-          <!-- 右侧测试面板 -->
-          <div id="wf-test-panel" style="overflow:hidden; border-left:1px solid var(--border); background:var(--input-bg); transition:width 0.25s, min-width 0.25s; display:flex; flex-direction:column;">
-            <div id="wf-test-panel-inner" style="width:380px; min-width:380px; display:flex; flex-direction:column; height:100%;">
+          <!-- 右侧测试面板（百炼风格） -->
+          <div id="wf-test-panel" style="overflow:hidden; border-left:1px solid var(--border); background:#fff; transition:width 0.3s, min-width 0.3s; display:flex; flex-direction:column; width:0; min-width:0;">
+            <div id="wf-test-panel-inner" style="width:400px; min-width:400px; display:flex; flex-direction:column; height:100%;">
               <!-- 测试面板头部 -->
-              <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--card-bg);">
-                <span style="font-weight:700; font-size:14px;">🧪 测试工作流</span>
-                <button class="btn-test" onclick="toggleTestPanel()" style="padding:3px 8px; font-size:12px;">✕</button>
-              </div>
-              <!-- 输入区 -->
-              <div id="wf-test-input-area" style="flex:1; overflow-y:auto; padding:12px 16px;">
-                <div id="wf-test-fields-container"></div>
-                <!-- 变量定义 -->
-                <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
-                  <div style="font-size:12px; font-weight:600; margin-bottom:8px; color:var(--text-secondary);">📝 环境变量</div>
-                  <div id="wf-test-vars"></div>
-                  <button class="btn-test" onclick="addTestVar()" style="font-size:11px; margin-top:6px;">+ 添加变量</button>
+              <div style="padding:16px 20px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-weight:600; font-size:15px; color:#1f2937;">测试</span>
+                  <select id="wf-test-type" style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; color:#374151; background:white; cursor:pointer;">
+                    <option value="chat">文本对话</option>
+                    <option value="completion">文本补全</option>
+                  </select>
                 </div>
-                <!-- 文件上传 -->
-                <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
-                  <div style="font-size:12px; font-weight:600; margin-bottom:8px; color:var(--text-secondary);">📎 附件（多模态）</div>
-                  <div id="wf-test-file-drop" style="border:2px dashed var(--border); border-radius:8px; padding:16px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--input-bg);"
-                       onclick="$('#wf-test-file-input').click()"
-                       ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'"
-                       ondragleave="this.style.borderColor='var(--border)'"
-                       ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; handleWfTestFiles(event.dataTransfer.files)">
-                    <div style="font-size:22px; margin-bottom:4px;">📎</div>
-                    <div style="font-size:11px; color:var(--text-secondary);">拖拽或 <span style="color:var(--primary); font-weight:600;">点击选择</span></div>
-                    <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">txt/pdf/docx/md/json/csv/图片/音频/视频</div>
+                <button onclick="toggleTestPanel()" style="width:28px; height:28px; border:none; border-radius:6px; background:transparent; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px;">✕</button>
+              </div>
+              <!-- 测试面板工具栏 -->
+              <div style="padding:8px 20px; display:flex; justify-content:flex-end; gap:4px; border-bottom:1px solid #f0f0f0;">
+                <button onclick="openWfInputConfig()" class="wf-test-tool-btn" title="入参参数配置">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+                <button onclick="openWfExpConfig()" class="wf-test-tool-btn" title="体验配置">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                </button>
+                <button onclick="clearWfTestHistory()" class="wf-test-tool-btn" title="清空记录">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+              </div>
+              <!-- 测试对话区域 -->
+              <div id="wf-test-chat" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:center; padding:40px 20px;">
+                <!-- 空状态 -->
+                <div id="wf-test-empty" style="text-align:center; padding:60px 20px;">
+                  <div style="width:80px; height:80px; margin:0 auto 16px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius:20px; display:flex; align-items:center; justify-content:center;">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
                   </div>
-                  <input type="file" id="wf-test-file-input" multiple style="display:none" onchange="handleWfTestFiles(this.files)">
-                  <div id="wf-test-file-list" style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;"></div>
+                  <div style="font-size:16px; font-weight:600; color:#374151; margin-bottom:8px;" id="wf-test-wf-name">工作流名称</div>
+                  <div style="font-size:14px; color:#6b7280;">输入问题进行测试体验</div>
                 </div>
-                <!-- 快捷操作 -->
-                <div style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap;">
-                  <button class="btn-test" onclick="loadWfTestPreset('hello')" style="font-size:11px;">👋 Hello</button>
-                  <button class="btn-test" onclick="loadWfTestPreset('json')" style="font-size:11px;">📋 JSON</button>
-                  <button class="btn-test" onclick="loadWfTestPreset('empty')" style="font-size:11px;">🗑 清空</button>
+                <!-- 对话消息区 -->
+                <div id="wf-test-messages" style="width:100%; max-width:100%; display:none;"></div>
+              </div>
+              <!-- 输入区域 -->
+              <div style="padding:12px 16px 16px; border-top:1px solid #f0f0f0; background:white;">
+                <div style="display:flex; align-items:flex-end; gap:8px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:8px 12px;">
+                  <button onclick="$('#wf-test-file-input').click()" style="width:32px; height:32px; border:none; border-radius:8px; background:transparent; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                  </button>
+                  <textarea id="wf-test-input" rows="1" placeholder="输入问题进行测试体验" style="flex:1; border:none; background:transparent; resize:none; font-size:14px; line-height:1.5; max-height:120px; min-height:24px; outline:none; font-family:inherit; color:#1f2937;"></textarea>
+                  <button id="wf-test-send-btn" onclick="executeWfTestFromInput()" style="width:36px; height:36px; border:none; border-radius:10px; background:#e5e7eb; color:#9ca3af; cursor:not-allowed; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                  </button>
                 </div>
-              </div>
-              <!-- 运行按钮 -->
-              <div style="padding:10px 16px; border-top:1px solid var(--border); background:var(--card-bg);">
-                <div id="wf-test-status" style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">就绪</div>
-                <button id="wf-test-run-btn" onclick="executeWfTest()" style="width:100%; padding:8px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer;">▶ 运行测试</button>
-              </div>
-              <!-- 输出区 -->
-              <div id="wf-test-output-area" style="border-top:1px solid var(--border); max-height:45%; overflow-y:auto; display:none;">
-                <div style="padding:10px 16px; border-bottom:1px solid var(--border); font-size:12px; font-weight:600; color:var(--text-secondary);">📊 输出结果</div>
-                <div id="wf-test-output-content" style="padding:12px 16px;"></div>
+                <input type="file" id="wf-test-file-input" multiple style="display:none" onchange="handleWfTestFiles(this.files)">
+                <div id="wf-test-file-list" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+                <div style="margin-top:8px; font-size:11px; color:#9ca3af; text-align:center;">内容由AI生成，仅供参考</div>
               </div>
             </div>
           </div>
@@ -465,6 +631,10 @@
               <span class="theme-preview sepia-preview"></span>
               <span>护眼</span>
             </button>
+            <button class="theme-pick-btn" data-theme="cartoon" title="卡通风景">
+              <span class="theme-preview cartoon-preview"></span>
+              <span>卡通风景</span>
+            </button>
           </div>
         </div>
 
@@ -576,6 +746,7 @@
           <button class="preset" data-name="硅基流动" data-url="https://api.siliconflow.cn/v1" data-key="sk-" data-models="Qwen/Qwen3-8B,deepseek-ai/DeepSeek-V3,THUDM/glm-4-9b-chat" data-free="Qwen/Qwen3-8B" data-ctx="32000">硅基流动</button>
           <button class="preset" data-name="Ollama 本地" data-url="http://localhost:11434" data-key="" data-models="" data-free="" data-ctx="32000">Ollama 本地</button>
           <button class="preset" data-name="OpenRouter" data-url="https://openrouter.ai/api/v1" data-key="sk-or-" data-models="meta-llama/llama-3.1-8b-instruct:free,google/gemma-2-9b-it:free,mistralai/mistral-7b-instruct:free" data-free="meta-llama/llama-3.1-8b-instruct:free" data-ctx="32000">OpenRouter</button>
+          <button class="preset" data-name="OpenCode Zen" data-url="https://opencode.ai/zen/v1" data-key="sk-" data-models="mimo-v2.5-free,deepseek-v4-flash-free,big-pickle,laguna-s-2.1-free,ling-3.0-flash-free,longcat-2.0-free,north-mini-code-free,nemotron-3-ultra-free,qwen3.7-max,qwen3.7-plus,claude-sonnet-4.5,gpt-5.4-mini" data-free="mimo-v2.5-free,deepseek-v4-flash-free,big-pickle,laguna-s-2.1-free,ling-3.0-flash-free,longcat-2.0-free,north-mini-code-free,nemotron-3-ultra-free" data-ctx="200000">OpenCode Zen</button>
         </div>
         <div id="preset-info" class="preset-info" style="display:none;margin-top:12px;padding:10px;border-radius:8px;background:var(--msg-user-bg);font-size:12px"></div>
       </div>
@@ -583,23 +754,27 @@
       <!-- 联网搜索 -->
       <div class="settings-section">
         <h3>🔍 联网搜索服务</h3>
-        <p class="hint">配置自建搜索服务，让 Agent 具备联网搜索能力。支持 SearXNG、Google CSE 或自定义 API。</p>
+        <p class="hint">配置搜索服务，让 Agent 具备联网搜索能力。</p>
         <label>搜索引擎类型</label>
         <select id="search-engine" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
-          <option value="searxng">SearXNG（推荐自建）</option>
+          <option value="builtin">🟢 内置搜索（开箱即用，百度/Bing/搜狗）</option>
+          <option value="searxng">SearXNG（需自建 Docker）</option>
           <option value="google_cse">Google Custom Search</option>
           <option value="custom">自定义 API</option>
         </select>
-        <label>搜索服务地址</label>
-        <input id="search-url" placeholder="如: http://localhost:8080/search" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
-        <label>API Key（可选）</label>
-        <input id="search-key" type="password" placeholder="如需要认证则填写" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+        <div id="search-url-group" style="display:none">
+          <label>搜索服务地址</label>
+          <input id="search-url" placeholder="如: http://localhost:8080/search" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+          <label>API Key（可选）</label>
+          <input id="search-key" type="password" placeholder="如需要认证则填写" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+        </div>
         <div class="form-actions">
           <button class="btn-test" onclick="testSearchService()">🔌 测试连接</button>
           <button class="btn-save" onclick="saveSearchSettings()">保存搜索设置</button>
         </div>
         <div id="search-test-result" class="test-result"></div>
         <p class="hint" style="margin-top:12px">
+          <b>内置搜索说明：</b>无需配置，开箱即用。聚合百度、Bing、搜狗三大搜索引擎，自动去重，国内网络直接可用。<br>
           <b>SearXNG 自建教程：</b><br>
           1. <code>docker run -d -p 8080:8080 searxng/searxng</code><br>
           2. 地址填 <code>http://localhost:8080/search</code><br>

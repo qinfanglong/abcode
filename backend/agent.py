@@ -183,17 +183,34 @@ def _web_search(query):
     try:
         import db
         search_url = db.get_setting("search_service_url", "")
-        search_engine = db.get_setting("search_engine", "searxng")
+        search_engine = db.get_setting("search_engine", "builtin")
         search_api_key = db.get_setting("search_api_key", "")
     except Exception:
         search_url = ""
-        search_engine = "searxng"
+        search_engine = "builtin"
         search_api_key = ""
 
-    # 如果没有配置自建服务，使用本地搜索代理（端口 8080）
+    # 如果没有配置自建服务，使用内置搜索
     if not search_url:
-        search_url = "http://localhost:8080/search"
-        search_engine = "searxng"
+        search_engine = "builtin"
+
+    # 内置搜索：直接调用本地搜索引擎模块
+    if search_engine == "builtin":
+        try:
+            from search_engine.engine import search_multi
+            results = search_multi(query, engines=["baidu", "bing", "sogou"], max_results=8)
+            if results:
+                lines = []
+                for r in results[:8]:
+                    title = r.get("title", "")
+                    url = r.get("url", "")
+                    snippet = r.get("snippet", "")
+                    if title and url:
+                        lines.append(f"- {title}\n  {url}\n  {snippet[:200] if snippet else ''}")
+                return "\n".join(lines) if lines else "内置搜索未返回结果"
+        except Exception as e:
+            # 内置搜索失败，继续尝试其他方式
+            pass
 
     if search_url:
         try:
@@ -305,11 +322,14 @@ def _fetch_url(url):
 
 def build_messages(history, user_msg, rag_context=None, thinking_mode=False):
     """组装消息：系统提示 + RAG 上下文 + 历史 + 当前问题"""
+    from time_utils import get_current_time_str, TIME_PROMPT_TPL
     sys_prompt = (
         "你是 ABcode，一个 AI Agent 助手。你可以使用工具来完成任务："
         "联网搜索实时信息、抓取网页、读写工作区文件、执行安全命令。"
         "需要时主动调用工具，不要编造信息。回答用中文，简洁清晰。"
     )
+    # 注入实时时间
+    sys_prompt += TIME_PROMPT_TPL.format(time=get_current_time_str())
     if thinking_mode:
         sys_prompt += (
             "\n\n请先在 <thinking> 标签内展示你的思考过程（推理、分析、权衡），"

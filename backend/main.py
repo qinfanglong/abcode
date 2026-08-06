@@ -54,6 +54,9 @@ def startup():
     connector_mod.init_builtins()
     db.init_channels_table()
     db.init_workflows_table()
+    # 初始化内置智能体
+    from agent_runtime import init_builtin_agents
+    init_builtin_agents()
     app.state.scheduler = cron_mod.start_scheduler(run_cron_job)
     
     # 启动自动更新检查（每24小时检查一次）
@@ -65,6 +68,7 @@ def startup():
 
 def run_cron_job(job):
     """定时任务执行：调用模型，结果写入会话"""
+    from time_utils import get_current_time_str
     providers = db.list_providers()
     if not providers:
         return "无可用供应商"
@@ -74,7 +78,7 @@ def run_cron_job(job):
     model = job["model"] or provider.get("default_model", "") or (provider["models"][0] if provider.get("models") else "")
     if not model:
         return "未配置模型"
-    messages = [{"role": "system", "content": "你是 ABcode，执行定时任务。"},
+    messages = [{"role": "system", "content": f"你是 ABcode，执行定时任务。当前时间：{get_current_time_str()}"},
                 {"role": "user", "content": job["prompt"]}]
     parts = []
     for evt in llm.stream_chat(provider, model, messages, tools=None):
@@ -214,6 +218,23 @@ def api_fetch_models(body: dict):
                 "deepseek-ai/DeepSeek-V3",
             ]
             return {"ok": True, "models": models, "free_models": models, "max_context": 128000}
+        
+        # 尝试 OpenCode Zen 格式
+        if "opencode.ai" in base_url.lower():
+            models = [
+                "mimo-v2.5-free", "deepseek-v4-flash-free", "big-pickle",
+                "laguna-s-2.1-free", "ling-3.0-flash-free", "longcat-2.0-free",
+                "north-mini-code-free", "nemotron-3-ultra-free",
+                "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
+                "claude-sonnet-4.5", "claude-opus-4.5", "claude-haiku-4.5",
+                "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5-nano",
+                "deepseek-v4-flash", "deepseek-v4-pro",
+                "minimax-m3", "minimax-m2.7",
+                "glm-5.2", "glm-5.1", "glm-5",
+                "kimi-k2.7-code", "kimi-k2.6", "kimi-k3",
+            ]
+            free_models = [m for m in models if "free" in m.lower()]
+            return {"ok": True, "models": models, "free_models": free_models, "max_context": 200000}
         
         return {"ok": False, "msg": f"HTTP {resp.status_code}", "models": []}
     except Exception as e:
@@ -381,6 +402,12 @@ def api_apply_expert(eid: str, body: dict = None):
     if not e:
         raise HTTPException(404, "Expert not found")
     db.record_expert_usage(eid)
+    
+    # 保存专家关联到会话
+    conv_id = body.get("conv_id") if body else None
+    if conv_id:
+        db.set_conv_expert(conv_id, eid)
+    
     return {
         "ok": True,
         "expert": e,
@@ -391,15 +418,22 @@ def api_apply_expert(eid: str, body: dict = None):
 
 
 # ================= 搜索引擎 =================
-from search_engine.engine import search as engine_search
+from search_engine.engine import search as engine_search, search_multi
 
 class SearchBody(BaseModel):
     query: str
     engine: str = "bing"
     max_results: int = 10
+    engines: str = ""  # 多引擎搜索，逗号分隔
 
 @app.post("/api/search")
 def api_search(body: SearchBody):
+    # 支持多引擎搜索
+    if body.engines:
+        engine_list = [e.strip() for e in body.engines.split(",") if e.strip()]
+        results = search_multi(body.query, engine_list, body.max_results)
+        return {"ok": True, "results": results, "engine": ",".join(engine_list)}
+    # 单引擎搜索
     results = engine_search(body.query, body.engine, body.max_results)
     return {"ok": True, "results": results, "engine": body.engine}
 
@@ -418,6 +452,17 @@ def build_tools(conv_id=None):
         tools += mcp_client.mcp_tools_for(None)
         tools += connector_mod.connector_tools_for(None)
     return tools
+
+
+def get_conv_expert(conv_id):
+    """获取会话关联的专家配置"""
+    if not conv_id:
+        return None
+    ct = db.get_conv_tools(conv_id)
+    expert_id = ct.get("expert_id", "")
+    if not expert_id:
+        return None
+    return db.get_expert(expert_id)
 
 
 def build_tools_filtered(conv_id=None, skills_enabled=True, mcp_enabled=True):
@@ -504,6 +549,111 @@ def api_chat(body: ChatBody):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+# ---------- 会话压缩 ----------
+class CompressBody(BaseModel):
+    messages: list = []
+    provider_id: str = ""
+    model: str = ""
+
+
+class CompressConvBody(BaseModel):
+    conv_id: str
+    provider_id: str = ""
+    model: str = ""
+
+
+def _pick_provider_model(provider_id, model):
+    """复用 api_chat 的 provider/model 选择逻辑"""
+    providers = db.list_providers()
+    if not providers:
+        raise HTTPException(400, "请先在设置中添加模型供应商")
+    provider = next((p for p in providers if p["id"] == provider_id), None)
+    if not provider:
+        provider = next((p for p in providers if p["enabled"]), providers[0])
+    m = model or provider.get("default_model", "")
+    if not m and provider.get("models"):
+        m = provider["models"][0]
+    if not m:
+        raise HTTPException(400, "该供应商未配置模型")
+    return provider, m
+
+
+def _msg_to_text(content):
+    """消息 content 可能是字符串或多模态数组，统一转字符串"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                if item.get("type") == "text":
+                    parts.append(item.get("text", ""))
+                elif item.get("type") == "image_url":
+                    parts.append("[图片]")
+                elif item.get("type") == "image":
+                    parts.append("[图片]")
+                else:
+                    parts.append(item.get("text", "") or "")
+            else:
+                parts.append(str(item))
+        return "\n".join(parts)
+    return str(content)
+
+
+def _make_summary(provider, model, messages):
+    """调用 LLM 压缩消息列表，返回摘要文本"""
+    sys_prompt = (
+        "你是对话摘要助手。请把下面的对话历史压缩成一份精炼的中文摘要："
+        "保留关键事实、用户需求、已得出的结论与待办事项，"
+        "控制在 300-500 字以内，不要编造内容。只输出摘要本身，不要解释。"
+    )
+    cleaned = []
+    for m in messages:
+        role = m.get("role", "user")
+        content = _msg_to_text(m.get("content", ""))
+        if not content.strip():
+            continue
+        cleaned.append({"role": role, "content": content})
+    if not cleaned:
+        raise HTTPException(400, "没有可压缩的消息内容")
+    msgs = [{"role": "system", "content": sys_prompt}] + cleaned
+    try:
+        summary = llm.chat_once(provider, model, msgs, timeout=180)
+    except llm.ModelError as e:
+        raise HTTPException(502, f"压缩失败: {e}")
+    except Exception as e:
+        raise HTTPException(502, f"压缩失败: {e}")
+    if not summary:
+        raise HTTPException(502, "模型未返回摘要")
+    return summary
+
+
+@app.post("/api/compress")
+def api_compress(body: CompressBody):
+    """压缩一段消息历史为摘要（无副作用，用于发送前自动压缩）"""
+    if not body.messages:
+        raise HTTPException(400, "没有可压缩的消息")
+    provider, model = _pick_provider_model(body.provider_id, body.model)
+    summary = _make_summary(provider, model, body.messages)
+    return {"summary": summary}
+
+
+@app.post("/api/compress_conv")
+def api_compress_conv(body: CompressConvBody):
+    """压缩整个会话：旧消息替换为一条摘要消息（重写消息记录）"""
+    conv = db.get_conversation(body.conv_id)
+    if not conv:
+        raise HTTPException(404, "会话不存在")
+    msgs = db.list_messages(body.conv_id)
+    if not msgs:
+        raise HTTPException(400, "会话暂无消息")
+    provider, model = _pick_provider_model(body.provider_id, body.model)
+    summary = _make_summary(provider, model, msgs)
+    db.clear_messages(body.conv_id)
+    db.add_message(body.conv_id, "assistant", "📌 历史已压缩为摘要：\n\n" + summary)
+    return {"summary": summary}
+
+
 def _message_content_with_attachments(text, attachments):
     """将附件转成多模态 content 数组"""
     if not attachments:
@@ -526,12 +676,50 @@ def _message_content_with_attachments(text, attachments):
 
 def agent_loop(provider, model, body, rag_context):
     """Agent 主循环：模型 <-> 工具，最多 5 轮"""
-    messages = agent.build_messages(body.history, body.message, rag_context, body.thinking_mode)
+    # 获取会话关联的专家
+    expert = get_conv_expert(body.conv_id)
+    
+    # 构建系统提示：专家优先，否则用默认
+    if expert and expert.get("system_prompt"):
+        sys_prompt = expert["system_prompt"]
+    else:
+        sys_prompt = (
+            "你是 ABcode，一个 AI Agent 助手。你可以使用工具来完成任务："
+            "联网搜索实时信息、抓取网页、读写工作区文件、执行安全命令。"
+            "需要时主动调用工具，不要编造信息。回答用中文，简洁清晰。"
+        )
+    # 注入实时时间
+    from time_utils import get_current_time_str, TIME_PROMPT_TPL
+    sys_prompt += TIME_PROMPT_TPL.format(time=get_current_time_str())
+    
+    if body.thinking_mode:
+        sys_prompt += (
+            "\n\n请先在 <thinking> 标签内展示你的思考过程（推理、分析、权衡），"
+            "然后再给出最终回答。思考过程要简洁，突出关键推理步骤。"
+            "示例格式：\n<thinking>\n用户想了解 X，我需要先查 Y...\n</thinking>\n\n最终回答..."
+        )
+    if rag_context:
+        sys_prompt += f"\n\n以下是从你的知识库中检索到的参考资料，优先依据这些内容回答：\n{rag_context}"
+    
+    # 构建消息：系统提示 + 历史 + 当前问题
+    messages = [{"role": "system", "content": sys_prompt}]
+    for h in body.history[-12:]:
+        if h.get("role") in ("user", "assistant"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": body.message})
+    
     # 当前用户消息带附件 -> 转多模态
     if body.attachments:
         messages[-1] = {"role": "user", "content": _message_content_with_attachments(body.message, body.attachments)}
-    # 根据开关构建可用工具列表
+    
+    # 根据开关构建可用工具列表（包含专家配置的工具）
     tools = build_tools_filtered(body.conv_id, body.skills_enabled, body.mcp_enabled)
+    # 专家额外工具
+    if expert and expert.get("tools"):
+        expert_tools = json.loads(expert["tools"]) if isinstance(expert["tools"], str) else expert["tools"]
+        if expert_tools:
+            tools += expert_tools
+    
     max_rounds = 5
 
     for round_idx in range(max_rounds):
@@ -936,7 +1124,19 @@ def api_settings_test_search(body: dict):
     """测试搜索服务连通性"""
     import httpx
     search_url = body.get("search_service_url", "")
-    search_engine = body.get("search_engine", "searxng")
+    search_engine = body.get("search_engine", "builtin")
+    
+    # 内置搜索直接测试
+    if search_engine == "builtin":
+        try:
+            from search_engine.engine import search
+            results = search("hello world", "bing", 3)
+            if results and not any("error" in r for r in results):
+                return {"ok": True, "msg": f"✅ 内置搜索正常！返回 {len(results)} 条结果"}
+            return {"ok": False, "msg": "⚠️ 内置搜索返回为空，可能网络受限"}
+        except Exception as e:
+            return {"ok": False, "msg": f"❌ 内置搜索失败: {e}"}
+    
     if not search_url:
         return {"ok": False, "msg": "未配置搜索服务地址"}
     try:
@@ -1021,6 +1221,13 @@ def api_update_backups():
 @app.get("/api/version")
 def api_version():
     return {"version": updater.VERSION, "platform": updater.get_platform(), "app": updater.APP_NAME}
+
+
+@app.get("/api/time")
+def api_time():
+    """返回当前时间，供前端显示"""
+    from time_utils import get_current_time_str
+    return {"time": get_current_time_str(), "timezone": "Asia/Shanghai"}
 
 
 # ================= 工作流 =================
@@ -1205,6 +1412,155 @@ def api_delete_workflow_template(tid: str):
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
+# ================= 智能体 =================
+from agent_runtime import AgentManager, AgentConfig, MultiAgentOrchestrator
+
+class AgentBody(BaseModel):
+    id: str = ""
+    name: str
+    category: str = "general"
+    icon: str = "🤖"
+    description: str = ""
+    system_prompt: str = ""
+    model_preference: str = ""
+    max_context: int = 128000
+    temperature: float = 0.7
+    top_p: float = 0.9
+    builtin_tools: list = []
+    skill_ids: list = []
+    mcp_ids: list = []
+    connector_ids: list = []
+    kb_ids: list = []
+    kb_top_k: int = 5
+    kb_score_threshold: float = 0.5
+    memory_enabled: bool = True
+    short_term_turns: int = 20
+    long_term_summary_interval: int = 10
+    user_profile_enabled: bool = True
+    max_rounds: int = 10
+    max_tokens_per_round: int = 4000
+    stop_sequences: list = []
+    sub_agents: list = []
+    collaboration_mode: str = "sequential"
+    prompt_templates: dict = {}
+    response_format: str = "text"
+    enable_reasoning: bool = False
+    auto_approve_tools: bool = False
+    enabled: bool = True
+
+
+@app.get("/api/agents")
+def api_list_agents(category: str = None):
+    return AgentManager.list(category)
+
+
+@app.get("/api/agents/{aid}")
+def api_get_agent(aid: str):
+    agent = AgentManager.get(aid)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    return agent.to_dict()
+
+
+@app.post("/api/agents")
+def api_create_agent(body: AgentBody):
+    config = AgentConfig(**body.dict())
+    AgentManager.create(config)
+    return {"id": config.id}
+
+
+@app.put("/api/agents/{aid}")
+def api_update_agent(aid: str, body: AgentBody):
+    existing = AgentManager.get(aid)
+    if not existing:
+        raise HTTPException(404, "Agent not found")
+    if existing.is_builtin:
+        raise HTTPException(400, "内置智能体不可修改")
+    config = AgentConfig(**body.dict())
+    config.id = aid
+    config.version = existing.version
+    config.created_by = existing.created_by
+    config.created_at = existing.created_at
+    AgentManager.update(config)
+    return {"ok": True}
+
+
+@app.delete("/api/agents/{aid}")
+def api_delete_agent(aid: str):
+    existing = AgentManager.get(aid)
+    if not existing:
+        raise HTTPException(404, "Agent not found")
+    if existing.is_builtin:
+        raise HTTPException(400, "内置智能体不可删除")
+    AgentManager.delete(aid)
+    return {"ok": True}
+
+
+@app.post("/api/agents/multi/run")
+def api_run_multi_agent(body: dict = Body(...)):
+    """运行多Agent编排"""
+    main_agent_id = body.get("main_agent_id")
+    sub_agent_ids = body.get("sub_agent_ids", [])
+    task = body.get("task", "")
+    context = body.get("context", {})
+    
+    if not main_agent_id:
+        raise HTTPException(400, "缺少 main_agent_id")
+    
+    orchestrator = AgentManager.create_multi_agent_orchestrator(main_agent_id, sub_agent_ids)
+    result = orchestrator.execute(task, context)
+    return result
+
+
+@app.post("/api/agents/{aid}/run")
+def api_run_agent(aid: str, body: dict = Body(...)):
+    """运行智能体（同步）"""
+    user_input = body.get("message", "")
+    session_id = body.get("session_id")
+    user_id = body.get("user_id", "")
+    attachments = body.get("attachments", [])
+    
+    runtime = AgentManager.create_runtime(aid, session_id, user_id)
+    result = runtime.run_sync(user_input, attachments)
+    return result
+
+
+@app.post("/api/agents/{aid}/run_stream")
+def api_run_agent_stream(aid: str, body: dict = Body(...)):
+    """流式运行智能体（SSE）"""
+    user_input = body.get("message", "")
+    session_id = body.get("session_id")
+    user_id = body.get("user_id", "")
+    attachments = body.get("attachments", [])
+    
+    runtime = AgentManager.create_runtime(aid, session_id, user_id)
+    
+    def gen():
+        try:
+            for evt in runtime.run(user_input, attachments, stream=True):
+                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+    
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.post("/api/agents/multi/run")
+def api_run_multi_agent(body: dict = Body(...)):
+    """运行多Agent编排"""
+    main_agent_id = body.get("main_agent_id")
+    sub_agent_ids = body.get("sub_agent_ids", [])
+    task = body.get("task", "")
+    context = body.get("context", {})
+    
+    if not main_agent_id:
+        raise HTTPException(400, "缺少 main_agent_id")
+    
+    orchestrator = AgentManager.create_multi_agent_orchestrator(main_agent_id, sub_agent_ids)
+    result = orchestrator.execute(task, context)
+    return result
 
 
 # ================= 工具列表 =================

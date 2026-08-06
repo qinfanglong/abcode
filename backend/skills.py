@@ -12,6 +12,100 @@ import db
 # 内置技能代码库
 BUILTIN_SKILLS = [
     {
+        "id": "skill_web_search",
+        "name": "联网搜索",
+        "description": "多引擎联网搜索（百度/Bing/搜狗），自动聚合去重，国内网络可用",
+        "code": '''"""
+ABCODE_SKILL
+name: 联网搜索
+description: 多引擎联网搜索（百度/Bing/搜狗），自动聚合去重
+"""
+import re
+import time
+import concurrent.futures
+from urllib.parse import quote_plus
+import requests
+
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+HDRS = {"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
+
+def web_search(query: str, engines: str = "baidu,bing,sogou", max_results: int = 8):
+    """
+    联网搜索，返回聚合结果。
+    query: 搜索关键词
+    engines: 逗号分隔的引擎列表，可选 baidu/bing/sogou/duckduckgo
+    max_results: 最大返回条数
+    """
+    engine_list = [e.strip() for e in engines.split(",") if e.strip()]
+    all_results = []
+    seen = set()
+
+    def _bing(q):
+        try:
+            r = requests.get(f"https://www.bing.com/search?q={quote_plus(q)}&count=8", headers=HDRS, timeout=8)
+            out = []
+            for m in re.finditer(r'<li class="b_algo"[^>]*>(.*?)</li>', r.text, re.S):
+                link = re.search(r'<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>', m.group(1), re.S)
+                if link:
+                    t = re.sub(r'<[^>]+>', '', link.group(2)).strip()
+                    if t and len(t) > 4:
+                        out.append({"title": t, "url": link.group(1), "snippet": "", "engine": "bing"})
+            return out
+        except: return []
+
+    def _baidu(q):
+        try:
+            r = requests.get(f"https://www.baidu.com/s?wd={quote_plus(q)}&rn=8", headers=HDRS, timeout=8)
+            out = []
+            for url, title in re.findall(r'<h3[^>]*>.*?<a href="([^"]+)"[^>]*>(.*?)</a>', r.text, re.S):
+                t = re.sub(r'<[^>]+>', '', title).strip()
+                if t and url.startswith("http"):
+                    out.append({"title": t, "url": url, "snippet": "", "engine": "baidu"})
+            return out
+        except: return []
+
+    def _sogou(q):
+        try:
+            r = requests.get(f"https://www.sogou.com/web?query={quote_plus(q)}", headers=HDRS, timeout=8)
+            out = []
+            for m in re.finditer(r'<h3[^>]*>.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', r.text, re.S):
+                t = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+                if t and m.group(1).startswith("http"):
+                    out.append({"title": t, "url": m.group(1), "snippet": "", "engine": "sogou"})
+            return out
+        except: return []
+
+    def _ddg(q):
+        try:
+            r = requests.post("https://html.duckduckgo.com/html/", data={"q": q}, headers=HDRS, timeout=8)
+            out = []
+            for m in re.finditer(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', r.text, re.S):
+                href = m.group(1)
+                if href.startswith("//"): href = "https:" + href
+                t = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+                if t and "duckduckgo" not in href:
+                    out.append({"title": t, "url": href, "snippet": "", "engine": "duckduckgo"})
+            return out
+        except: return []
+
+    fns = {"bing": _bing, "baidu": _baidu, "sogou": _sogou, "duckduckgo": _ddg}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(engine_list)) as pool:
+        futs = {pool.submit(fns.get(e, _bing), query): e for e in engine_list}
+        done, _ = concurrent.futures.wait(futs, timeout=10)
+        for f in done:
+            try:
+                for r in f.result(timeout=0):
+                    url = r.get("url", "")
+                    if url and url not in seen and not r.get("error"):
+                        seen.add(url)
+                        all_results.append(r)
+            except: pass
+
+    return "\\n".join(f"[{r['engine']}] {r['title']}\\n{r['url']}" for r in all_results[:max_results]) or "未找到结果"
+''',
+    },
+    {
         "id": "skill_calc",
         "name": "数学计算器",
         "description": "执行复杂数学计算（支持 sin/cos/sqrt/pow/log 等）",
