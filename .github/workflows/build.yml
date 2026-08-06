@@ -59,6 +59,31 @@ jobs:
           $ErrorActionPreference = "Stop"
           $version = $env:VERSION.TrimStart('v')
           
+          Write-Host "Checking available tools..."
+          Write-Host "tar: $(Get-Command tar -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)"
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Files: $(Get-ChildItem | ForEach-Object { $_.Name })"
+          
+          # Check directories exist
+          $dirs = @("backend", "frontend", "macapp", "scripts", "docs", "build")
+          foreach ($d in $dirs) {
+            if (Test-Path $d) {
+              Write-Host "Directory $d exists"
+            } else {
+              Write-Host "Directory $d NOT found"
+            }
+          }
+          
+          # Check files
+          $files = @("start.sh", "start.bat", "requirements.txt", "README.md", "CHANGELOG.md", "LICENSE")
+          foreach ($f in $files) {
+            if (Test-Path $f) {
+              Write-Host "File $f exists"
+            } else {
+              Write-Host "File $f NOT found"
+            }
+          }
+          
           Write-Host "Creating Windows source packages..."
           
           # Create dist directory
