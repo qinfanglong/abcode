@@ -328,11 +328,13 @@ class WorkflowEngine:
                 content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{raw}"}})
         return content
 
-    def _store_output(self, node_id, output):
+    def _store_output(self, node_id, output, output_var=None):
         """把节点输出存到变量，支持指定变量名"""
-        output_var = node_id + "_output"
-        self.variables[output_var] = output
-        return output_var
+        out_name = (output_var or "").strip() or (node_id + "_output")
+        self.variables[out_name] = output
+        if out_name != node_id + "_output":
+            self.variables[node_id + "_output"] = output  # 兼容旧引用
+        return out_name
 
     # ================= 节点执行 =================
 
@@ -383,7 +385,7 @@ class WorkflowEngine:
             "duration_ms": req_duration,
             "type": "llm",
         }
-        self._store_output(node["id"], output)
+        self._store_output(node["id"], output, config.get("output_variable"))
         return output
 
     def _execute_kb_search(self, node, config):
@@ -580,10 +582,23 @@ class WorkflowEngine:
         req_start = time.time()
 
         if language == "python":
-            local_vars = {"variables": self.variables, "json": json, "math": __import__("math")}
+            # 常用内建白名单（exec 沙箱默认清空 builtins，这里放行常用函数）
+            safe_builtins = {
+                "str": str, "int": int, "float": float, "bool": bool, "len": len,
+                "list": list, "dict": dict, "set": set, "tuple": tuple,
+                "abs": abs, "min": min, "max": max, "sum": sum, "round": round,
+                "sorted": sorted, "range": range, "enumerate": enumerate, "zip": zip,
+                "any": any, "all": all, "isinstance": isinstance, "repr": repr,
+                "print": print, "Exception": Exception, "__import__": __import__,
+            }
+            local_vars = {"variables": self.variables, "params": self.variables,
+                          "json": json, "math": __import__("math")}
             try:
-                exec(code, {"__builtins__": {}}, local_vars)
-                self.variables = local_vars.get("variables", self.variables)
+                exec(code, {"__builtins__": safe_builtins}, local_vars)
+                # variables 是引用，直接改 dict 会生效；result 变量在 exec 局部作用域
+                result_val = local_vars.get("result")
+                if result_val is not None:
+                    self.variables[node["id"] + "_output"] = result_val
             except Exception as e:
                 req_duration = int((time.time() - req_start) * 1000)
                 self.node_requests[node["id"]] = {
@@ -595,14 +610,20 @@ class WorkflowEngine:
                 raise RuntimeError(f"代码执行错误: {e}")
 
         req_duration = int((time.time() - req_start) * 1000)
-        output_var = node["id"] + "_output"
-        output = self.variables.get(output_var, "")
+        # 输出变量名：优先面板配置，否则 result（前端默认），兼容旧版 node_id_output
+        out_var = (config.get("output_variable") or "").strip() or "result"
+        # result 由 exec 写入 node_id_output；若用户代码直接写了目标变量则优先读它
+        if out_var != node["id"] + "_output" and out_var in self.variables:
+            output = self.variables[out_var]
+        else:
+            output = self.variables.get(node["id"] + "_output", "")
         self.node_requests[node["id"]] = {
             "request": {"language": language, "code": code[:2000]},
             "response": {"text": str(output)[:2000]},
             "duration_ms": req_duration,
             "type": "code",
         }
+        self._store_output(node["id"], output, config.get("output_variable"))
         return output
 
     def _execute_http(self, node, config):
@@ -695,7 +716,7 @@ class WorkflowEngine:
                     lines.append(line)
             output = "\n".join(lines)
 
-        self._store_output(node["id"], output)
+        self._store_output(node["id"], output, config.get("output_variable"))
         return output
 
     def _execute_aggregator(self, node, config):
