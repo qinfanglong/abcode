@@ -3400,6 +3400,11 @@ function buildVarHints() {
     if (n.type === "condition") vars.add(n.config?.variable);
     if (n.type === "classifier") vars.add(n.id + "_category");
     if (n.type === "aggregator") vars.add(n.id + "_aggregated");
+    if (n.type === "loop") {
+      vars.add(n.config?.item_variable || "item");
+      vars.add(n.config?.index_variable || "index");
+      vars.add(n.id + "_results");
+    }
     (n.config?.fields || []).forEach(f => { if (f.name) vars.add(f.name); });
   });
   vars.delete(undefined);
