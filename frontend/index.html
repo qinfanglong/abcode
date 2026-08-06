@@ -37,6 +37,7 @@
       </div>
     </div>
     <button id="new-chat-btn" class="btn-new-chat">＋ 新建会话</button>
+    <button id="sidebar-toggle" class="btn-sidebar-toggle" title="折叠 / 展开侧边栏（推入 / 推出）">«</button>
     <div id="conv-list" class="conv-list"></div>
     <div class="sidebar-footer">
       <button id="agent-btn" class="btn-sidebar">🤖 智能体</button>
@@ -81,6 +82,10 @@
         </div>
       </div>
       <div id="messages"></div>
+      <div id="read-more-bar" class="read-more-bar" style="display:none" onclick="jumpToLatest()" title="继续阅读到当前生成位置">
+        <span class="rmb-dot"></span>
+        <span id="rmb-text">⬇ 继续阅读</span>
+      </div>
     </div>
 
     <footer id="input-bar">
@@ -611,6 +616,10 @@
         <div class="pref-group">
           <h4>🎨 主题风格</h4>
           <div class="theme-picker">
+            <button class="theme-pick-btn" data-theme="minimal" title="极简灰">
+              <span class="theme-preview minimal-preview"></span>
+              <span>极简灰</span>
+            </button>
             <button class="theme-pick-btn" data-theme="light" title="亮色主题">
               <span class="theme-preview light-preview"></span>
               <span>亮色</span>
@@ -627,6 +636,21 @@
               <span class="theme-preview cartoon-preview"></span>
               <span>卡通风景</span>
             </button>
+            <button class="theme-pick-btn" data-theme="particles" title="粒子星空">
+              <span class="theme-preview particles-preview"></span>
+              <span>粒子星空</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="particles-light" title="淡雅粒子">
+              <span class="theme-preview particles-light-preview"></span>
+              <span>淡雅粒子</span>
+            </button>
+          </div>
+          <div class="pref-row" style="margin-top:8px">
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="particle-animate-toggle" checked> 粒子动画（关闭则显示静态星空）
+              </label>
+            </div>
           </div>
         </div>
 

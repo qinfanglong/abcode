@@ -11,6 +11,7 @@ let state = {
   agentEnabled: true,
   modelTypeFilter: "all", // "all" | "local" | "network"
   theme: localStorage.getItem("abcode-theme") || "light",
+  particleAnimate: localStorage.getItem("abcode-particle-anim") !== "false", // 粒子动画开关
   // 字体设置
   chatFont: localStorage.getItem("abcode-font") || '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif',
   chatFontSize: parseInt(localStorage.getItem("abcode-fontsize")) || 15,
@@ -32,6 +33,7 @@ async function init() {
   applyTheme(state.theme);
   applyFontSettings();
   applySuggestionSettings();
+  applyParticleAnimationSettings();
   await Promise.all([loadProviders(), loadConvs()]);
   bindEvents();
   if (state.providers.length > 0) {
@@ -70,14 +72,17 @@ function resetPreferences() {
   state.chatLineHeight = "1.7";
   state.suggestionEnabled = true;
   state.agentEnabled = true;
+  state.particleAnimate = true;
   localStorage.removeItem("abcode-theme");
   localStorage.removeItem("abcode-font");
   localStorage.removeItem("abcode-fontsize");
   localStorage.removeItem("abcode-lineheight");
   localStorage.removeItem("abcode-suggestion");
+  localStorage.removeItem("abcode-particle-anim");
   applyTheme(state.theme);
   applyFontSettings();
   applySuggestionSettings();
+  applyParticleAnimationSettings();
   alert("已恢复默认设置");
 }
 
@@ -122,6 +127,19 @@ function applySuggestionSettings() {
 
 function saveSuggestionSettings() {
   localStorage.setItem("abcode-suggestion", state.suggestionEnabled);
+}
+
+// ===== 粒子动画设置 =====
+function applyParticleAnimationSettings() {
+  const toggle = document.getElementById("particle-animate-toggle");
+  if (toggle) toggle.checked = state.particleAnimate;
+}
+
+function saveParticleAnimationSettings() {
+  localStorage.setItem("abcode-particle-anim", state.particleAnimate);
+  // 当前是粒子主题则立即按新状态刷新（开=动起来，关=定格一帧静态）
+  if (state.theme === "particles") startParticles({ light: false });
+  else if (state.theme === "particles-light") startParticles({ light: true });
 }
 
 // ===== 生成提示词建议 =====
@@ -596,6 +614,97 @@ function applyTheme(theme) {
   $$(".theme-pick-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.theme === theme);
   });
+  // 粒子主题：启用柔和粒子背景（深色星空 / 淡雅白昼）
+  if (theme === "particles") {
+    startParticles({ light: false });
+  } else if (theme === "particles-light") {
+    startParticles({ light: true });
+  } else {
+    stopParticles();
+  }
+}
+
+// ===== 粒子背景（仅粒子主题启用，柔和、不晃眼） =====
+let _pRaf = null;
+let _pCtx = null;
+let _pParticles = [];
+
+function startParticles(opts = {}) {
+  const light = !!opts.light;
+  stopParticles(); // 幂等：先清旧
+  let canvas = $("#particle-bg");
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    canvas.id = "particle-bg";
+    document.body.appendChild(canvas);
+  }
+  canvas.style.display = "block";
+  const ctx = canvas.getContext("2d");
+  _pCtx = ctx;
+
+  const resize = () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  };
+  resize();
+  window.addEventListener("resize", resize);
+
+  // 生成粒子：数量适中，柔和不刺眼；深色/白昼两种色板
+  const count = Math.min(120, Math.floor(window.innerWidth / 14));
+  _pParticles = Array.from({ length: count }, () => {
+    // 白昼：偏淡蓝/紫的低饱和浅色，透明度更淡；夜空：蓝紫星光
+    const hue = light ? 200 + Math.random() * 60 : 205 + Math.random() * 50;
+    const sat = light ? 40 : 60;
+    const lum = light ? 78 : 70;
+    const a = light ? 0.05 + Math.random() * 0.20 : 0.06 + Math.random() * 0.28;
+    return {
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: 0.6 + Math.random() * 1.8,           // 小半径，避免刺眼
+      vx: (Math.random() - 0.5) * 0.18,        // 慢速漂移
+      vy: -0.05 - Math.random() * 0.18,        // 缓慢上浮
+      a,
+      hue, sat, lum,
+    };
+  });
+
+  let last = performance.now();
+  // 统一渲染一帧（不移动粒子）
+  const renderFrame = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of _pParticles) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lum}%, ${p.a})`;
+      ctx.fill();
+    }
+  };
+  const draw = (t) => {
+    const dt = Math.min(0.05, (t - last) / 1000);
+    last = t;
+    for (const p of _pParticles) {
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
+      if (p.x < -10) p.x = canvas.width + 10;
+      if (p.x > canvas.width + 10) p.x = -10;
+    }
+    renderFrame();
+    _pRaf = requestAnimationFrame(draw);
+  };
+  if (state.particleAnimate) {
+    _pRaf = requestAnimationFrame(draw);
+  } else {
+    renderFrame(); // 动画关闭：只画一帧静态
+  }
+}
+
+function stopParticles() {
+  if (_pRaf) { cancelAnimationFrame(_pRaf); _pRaf = null; }
+  const canvas = $("#particle-bg");
+  if (canvas) canvas.style.display = "none";
+  _pCtx = null;
+  _pParticles = [];
 }
 
 // ===== 通用模态框 =====
@@ -662,7 +771,11 @@ async function loadMessages(convId) {
   area.innerHTML = "";
   $("#welcome").style.display = msgs.length ? "none" : "block";
   msgs.forEach((m) => appendMessage(m.role, m.content, false, m.attachments));
+  // 切会话/加载后默认位于底部，并重置未读计数
+  _atBottom = true;
+  _pendingNew = 0;
   scrollBottom();
+  syncReadMoreBar();
 }
 
 async function deleteConv(id) {
@@ -1276,6 +1389,76 @@ function decorateCodeBlocks(root) {
 function scrollBottom() {
   const area = $("#chat-area");
   area.scrollTop = area.scrollHeight;
+}
+
+// ===== 流式阅读跟随：仅当用户在底部时自动滚动；否则显示「下拉阅读」悬浮条 =====
+let _atBottom = true;       // 用户当前是否停留在最新底部附近
+let _pendingNew = 0;         // 生成中新增的未读条数（供悬浮条计数）
+
+function isNearBottom(area) {
+  if (!area) area = $("#chat-area");
+  if (!area) return true;
+  return area.scrollHeight - area.scrollTop - area.clientHeight < 60;
+}
+
+// 更新当前底部跟随状态，并在用户滚离底部且正生成时显示「下拉阅读」提示
+function onChatScroll() {
+  const area = $("#chat-area");
+  const was = _atBottom;
+  _atBottom = isNearBottom(area);
+  if (!_atBottom && was) {
+    // 刚从底部滚上去：重置未读计数（视为重新开始阅读上方内容）
+    _pendingNew = 0;
+  }
+  syncReadMoreBar();
+}
+
+function syncReadMoreBar() {
+  const bar = $("#read-more-bar");
+  const text = $("#rmb-text");
+  if (!bar) return;
+  const area = $("#chat-area");
+  const streaming = state.streaming;
+  // 用户滚离底部且下方仍有内容时展示；生成中显示「运行中」状态点
+  const shouldShow = !_atBottom && hasContent(area);
+  if (shouldShow) {
+    bar.style.display = "flex";
+    bar.classList.toggle("running", streaming);
+    const label = streaming ? "运行中" : "回到最新";
+    const count = _pendingNew > 0 ? ` · ${_pendingNew} 条新内容` : "";
+    text.textContent = `${streaming ? "🔴" : "⬇"} ${label}${count} · ${streaming ? "阅读到当前" : "跳到底部"}`;
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+function hasContent(area) {
+  const msgs = $("#messages");
+  return !!(msgs && msgs.children.length);
+}
+
+// 点击「阅读到当前」：跳到最新生成位置并恢复跟随状态
+function jumpToLatest() {
+  scrollBottom();
+  _atBottom = true;
+  _pendingNew = 0;
+  syncReadMoreBar();
+}
+
+// 智能跟随：用户在底部才自动滚动；否则保留当前位置并同步悬浮条
+function follow() {
+  _atBottom = isNearBottom();
+  if (_atBottom) {
+    scrollBottom();
+  }
+  syncReadMoreBar();
+}
+
+// 始终跳到底部（用户主动点按/非流式场景）
+function followLatest() {
+  scrollBottom();
+  _atBottom = true;
+  syncReadMoreBar();
 }
 
 // ===== 附件上传（图片/视频/文件） =====
@@ -4087,7 +4270,7 @@ function createToolCard(name, args) {
     // 找不到气泡时直接追加到消息区
     $("#messages").appendChild(card);
   }
-  scrollBottom();
+  follow();
   return card;
 }
 
@@ -4100,7 +4283,7 @@ function setToolStatus(card, status, text) {
     resultPre.textContent = text;
   }
   card.classList.remove("open");
-  scrollBottom();
+  follow();
 }
 
 // ===== 发送：队列 / 抢断 / 自动压缩 =====
@@ -4245,7 +4428,13 @@ async function doSend(text, attachFiles = null) {
           }
           holder.querySelector(".bubble").innerHTML = renderMarkdown(acc);
           decorateCodeBlocks(holder.querySelector(".bubble"));
-          scrollBottom();
+          // 智能跟随：在底部才自动滚动；滚离底部则计数并显示「下拉阅读」
+          if (_atBottom) {
+            scrollBottom();
+          } else {
+            _pendingNew++;
+            syncReadMoreBar();
+          }
         } else if (payload.tool_start) {
           currentTool = createToolCard(payload.tool_start.name, payload.tool_start.args);
         } else if (payload.tool_result) {
@@ -4254,7 +4443,11 @@ async function doSend(text, attachFiles = null) {
               payload.tool_result.ok ? "✅ 完成" : "❌ 失败");
           }
         } else if (payload.error) {
-          holder.querySelector(".bubble").innerHTML = `<div class="bubble error">⚠ ${esc(payload.error)}</div>`;
+          // 追加错误信息而不是覆盖已生成内容，避免"工具调用后中断/丢失"
+          const errEl = document.createElement("div");
+          errEl.className = "bubble error";
+          errEl.innerHTML = `⚠ ${esc(payload.error)}`;
+          holder.querySelector(".bubble").appendChild(errEl);
           done = true;
         } else if (payload.done) {
           done = true;
@@ -4285,6 +4478,9 @@ async function doSend(text, attachFiles = null) {
         console.warn("生成提示词建议失败:", e);
       }
     }
+    // 记录停止时用户是否已滚离底部，用于收尾时保留阅读位置
+    const keepPos = !_atBottom;
+    const prevScrollTop = $("#chat-area").scrollTop;
     if (state.currentConvId) {
       try {
         loadMessages(state.currentConvId);
@@ -4293,9 +4489,17 @@ async function doSend(text, attachFiles = null) {
       }
     }
     try {
-      scrollBottom();
+      if (keepPos && !state.streaming) {
+        // 用户中途停止且已滚离底部：保留阅读位置不受打扰
+        $("#chat-area").scrollTop = prevScrollTop;
+        _atBottom = false;
+      } else {
+        _atBottom = true;
+        scrollBottom();
+      }
+      syncReadMoreBar();
     } catch (e) {
-      console.warn("滚动到底部失败:", e);
+      console.warn("滚动收尾失败:", e);
     }
     // 发送队列中的下一条
     processQueue();
@@ -4483,6 +4687,14 @@ function bindEvents() {
   });
   input.addEventListener("input", autoResize);
 
+  // 聊天区滚动跟随：滚离底部时停止自动滚动并显示「下拉阅读」
+  const chatArea = $("#chat-area");
+  if (chatArea) {
+    chatArea.addEventListener("scroll", onChatScroll, { passive: true });
+    chatArea.addEventListener("wheel", onChatScroll, { passive: true });
+    chatArea.addEventListener("touchmove", onChatScroll, { passive: true });
+  }
+
   $("#provider-select").onchange = (e) => {
     state.currentProviderId = e.target.value;
     const p = getProvider(state.currentProviderId);
@@ -4643,6 +4855,16 @@ function bindEvents() {
     suggestionToggle.addEventListener("change", () => {
       state.suggestionEnabled = suggestionToggle.checked;
       saveSuggestionSettings();
+    });
+  }
+
+  // 粒子动画开关
+  const particleAnimToggle = document.getElementById("particle-animate-toggle");
+  if (particleAnimToggle) {
+    particleAnimToggle.checked = state.particleAnimate;
+    particleAnimToggle.addEventListener("change", () => {
+      state.particleAnimate = particleAnimToggle.checked;
+      saveParticleAnimationSettings();
     });
   }
 
@@ -4883,4 +5105,82 @@ function initCharCount() {
   }
 }
 
+// ===== 侧边栏：折叠 / 展开（推入 / 推出） + 导航拖拽排序 =====
+function initSidebar() {
+  const sidebar = $("#sidebar");
+  const toggle = $("#sidebar-toggle");
+  if (!sidebar || !toggle) return;
+
+  // 恢复折叠状态
+  if (localStorage.getItem("abcode-sidebar-collapsed") === "1") {
+    sidebar.classList.add("collapsed");
+    $("#main").classList.add("sidebar-collapsed");
+  }
+
+  toggle.addEventListener("click", () => {
+    sidebar.classList.toggle("collapsed");
+    const isCollapsed = sidebar.classList.contains("collapsed");
+    localStorage.setItem("abcode-sidebar-collapsed", isCollapsed ? "1" : "0");
+    $("#main").classList.toggle("sidebar-collapsed", isCollapsed);
+    toggle.textContent = isCollapsed ? "»" : "«";
+    // 折叠后内新栏按钮挤压，触发窗口自适应
+    window.dispatchEvent(new Event("resize"));
+  });
+  toggle.textContent = sidebar.classList.contains("collapsed") ? "»" : "«";
+
+  // 社交栏导航：拖拽排序（HTML5 draggable）
+  const footer = document.querySelector(".sidebar-footer");
+  if (!footer) return;
+  const navIds = ["agent-btn", "team-btn", "expert-btn", "workflow-btn",
+    "tools-btn", "kb-btn", "cron-btn", "channel-btn", "settings-btn"];
+  const STORE = "abcode-nav-order";
+  // 恢复已保存顺序
+  const saved = localStorage.getItem(STORE);
+  const savedIds = saved ? JSON.parse(saved) : [];
+  if (savedIds.length) {
+    savedIds.forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) footer.appendChild(btn);
+    });
+  }
+  footer.addEventListener("dragstart", (e) => {
+    const btn = e.target.closest(".btn-sidebar");
+    if (!btn) return;
+    e.dataTransfer.setData("text/plain", btn.id);
+    e.dataTransfer.effectAllowed = "move";
+    btn.classList.add("dragging");
+  });
+  footer.addEventListener("dragend", (e) => {
+    const btn = e.target.closest(".btn-sidebar");
+    if (btn) btn.classList.remove("dragging");
+    footer.querySelectorAll(".drop-hint").forEach((el) => el.remove());
+    const order = Array.from(footer.querySelectorAll(".btn-sidebar")).map((b) => b.id);
+    localStorage.setItem(STORE, JSON.stringify(order));
+  });
+  footer.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const target = e.target.closest(".btn-sidebar");
+    if (!target) return;
+    target.classList.add("drop-hint");
+  });
+  footer.addEventListener("dragleave", (e) => {
+    const target = e.target.closest(".btn-sidebar");
+    if (target) target.classList.remove("drop-hint");
+  });
+  footer.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const target = e.target.closest(".btn-sidebar");
+    if (!target) return;
+    target.classList.remove("drop-hint");
+    const dragId = e.dataTransfer.getData("text/plain");
+    const dragBtn = document.getElementById(dragId);
+    if (!dragBtn || dragBtn === target) return;
+    const box = target.getBoundingClientRect();
+    const before = e.clientY < box.top + box.height / 2;
+    footer.insertBefore(dragBtn, before ? target : target.nextSibling);
+    const order = Array.from(footer.querySelectorAll(".btn-sidebar")).map((b) => b.id);
+    localStorage.setItem(STORE, JSON.stringify(order));
+  });
+}
 init();
+initSidebar();

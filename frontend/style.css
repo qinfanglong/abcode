@@ -145,13 +145,104 @@
 
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--chat-bg); color: var(--chat-text); }
 
+/* ===== 极简灰主题（内容优先、低对比、护眼不刺眼） ===== */
+[data-theme="minimal"] {
+  --sidebar-bg: #f3f3f6;
+  --sidebar-text: #4a4a55;
+  --sidebar-hover: #e7e8ee;
+  --primary: #6b7280;
+  --primary-hover: #52525b;
+  --chat-bg: #f9f9fb;
+  --chat-text: #2d2d33;
+  --border: #e2e3e9;
+  --msg-user-bg: #ececf0;
+  --msg-assistant-bg: #f5f5f8;
+  --input-bg: #ffffff;
+  --text-secondary: #6a6a75;
+  --text-muted: #9a9aa6;
+  --card-bg: #ffffff;
+  --modal-bg: #ffffff;
+  --modal-overlay: rgba(30, 30, 38, 0.35);
+  --code-bg: #4a4a55;
+  --code-text: #f4f4f6;
+}
+[data-theme="minimal"] #topbar { background: #f9f9fb; border-color: #e2e3e9; }
+[data-theme="minimal"] #input-bar { background: #f9f9fb; border-color: #e2e3e9; }
+[data-theme="minimal"] body { background: #f9f9fb; color: #2d2d33; }
+[data-theme="minimal"] #sidebar { background: #f3f3f6; border-color: #e2e3e9; }
+[data-theme="minimal"] #chat-input { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
+[data-theme="minimal"] .modal-content { background: #ffffff; }
+[data-theme="minimal"] .provider-item { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .provider-item button { background: #f0f0f4; border-color: #dcdce3; color: #4a4a55; }
+[data-theme="minimal"] .preset { background: #ffffff; border-color: #e2e3e9; color: #4a4a55; }
+[data-theme="minimal"] .switch-label { background: #ffffff; border-color: #e2e3e9; color: #4a4a55; }
+[data-theme="minimal"] .topbar-right select { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
+[data-theme="minimal"] .bubble pre { background: #4a4a55; }
+[data-theme="minimal"] .tool-card { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .tool-card-head { background: #f3f3f6; }
+[data-theme="minimal"] .msg.assistant .bubble { border-color: #e2e3e9; }
+[data-theme="minimal"] .msg.user .bubble { background: #ececf0; }
+[data-theme="minimal"] ::-webkit-scrollbar-thumb { background: #d4d4dc; }
+[data-theme="minimal"] #sidebar ::-webkit-scrollbar-thumb { background: #dfe0e6; }
+[data-theme="minimal"] .kb-ref-panel { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .kb-ref-search { border-color: #e2e3e9; }
+[data-theme="minimal"] .kb-ref-search input { color: #2d2d33; }
+[data-theme="minimal"] .channel-enabled-card { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .channel-grid-item { background: #ffffff; border-color: #e2e3e9; color: #4a4a55; }
+[data-theme="minimal"] .mode-popup { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .mode-popup-header { border-color: #e2e3e9; }
+[data-theme="minimal"] .mode-option:hover { background: #f3f3f6; }
+[data-theme="minimal"] .mode-option-name { color: #2d2d33; }
+[data-theme="minimal"] .mode-option-desc { color: #6a6a75; }
+[data-theme="minimal"] .mode-selector-btn { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
+[data-theme="minimal"] .ext-item { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .ext-item button.on { background: #6b7280; color: white; }
+[data-theme="minimal"] .submit-btn { background: #6b7280; }
+[data-theme="minimal"] .sub-form { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .sub-form input, [data-theme="minimal"] .sub-form textarea, [data-theme="minimal"] .sub-form select { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
+[data-theme="minimal"] .tab.active { color: #6b7280; }
+[data-theme="minimal"] .ct-check { background: #ffffff; border-color: #e2e3e9; color: #4a4a55; }
+[data-theme="minimal"] .ct-check.active { border-color: #6b7280; color: #6b7280; }
+[data-theme="minimal"] .btn-delete { background: #f3f3f6; border-color: #e2e3e9; color: #6a6a75; }
+[data-theme="minimal"] .btn-delete:hover { background: #fde8e8; border-color: #ef4444; color: #ef4444; }
+[data-theme="minimal"] .team-member-card { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .add-form { background: #ffffff; }
+[data-theme="minimal"] .add-form input, [data-theme="minimal"] .add-form select { background: #ffffff; border-color: #e2e3e9; color: #2d2d33; }
+[data-theme="minimal"] .cron-job { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .kb-doc { background: #ffffff; border-color: #e2e3e9; }
+[data-theme="minimal"] .welcome-logo { background: linear-gradient(135deg, #6b7280, #52525b); }
+[data-theme="minimal"] .msg.assistant .avatar { background: linear-gradient(135deg, #6b7280, #52525b); }
+[data-theme="minimal"] .msg.user .avatar { background: #e0e0e6; color: #4a4a55; }
+
 #app { display: flex; height: 100vh; }
 
 /* ===== 侧边栏 ===== */
 #sidebar {
   width: 260px; background: var(--sidebar-bg); color: var(--sidebar-text);
   display: flex; flex-direction: column; flex-shrink: 0;
+  transition: width 0.22s ease;
+  overflow: hidden;
 }
+.btn-sidebar-toggle {
+  align-self: flex-end; margin: 0 10px 6px; border: none; border-radius: 6px;
+  background: var(--sidebar-hover); color: var(--sidebar-text); cursor: pointer;
+  width: 26px; height: 26px; font-size: 13px; line-height: 1; flex-shrink: 0;
+  transition: all 0.2s;
+}
+.btn-sidebar-toggle:hover { background: #3a3d42; }
+/* 折叠（推入）状态 */
+#sidebar.collapsed {
+  width: 56px;
+}
+#sidebar.collapsed .brand-text,
+#sidebar.collapsed .btn-new-chat,
+#sidebar.collapsed .conv-list,
+#sidebar.collapsed .sidebar-footer,
+#sidebar.collapsed .brand-logo-wrap { display: none; }
+#sidebar.collapsed .btn-sidebar-toggle {
+  transform: rotate(180deg); margin: 12px; width: 32px; height: 32px;
+}
+#sidebar.collapsed .brand { justify-content: center; padding: 16px 0; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 18px 16px; }
 .brand-logo {
   width: 40px; height: 40px; border-radius: 10px; background: var(--primary);
@@ -202,6 +293,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   margin-bottom: 6px; text-align: left; padding-left: 14px;
 }
 .btn-sidebar:hover { background: #3a3d42; }
+.btn-sidebar.dragging { opacity: 0.4; border: 1px dashed var(--primary); }
+.btn-sidebar.drop-hint { box-shadow: inset 0 2px 0 var(--primary); }
+.btn-sidebar { -webkit-user-select: none; user-select: none; }
 
 /* ===== 主区域 ===== */
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -272,6 +366,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   content: "▌"; animation: blink 0.8s infinite;
 }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* 气泡文字允许鼠标选中（滚轮选中阅读） */
+.msg .bubble, .msg .bubble * { user-select: text; -webkit-user-select: text; }
+#chat-area { user-select: text; }
+
+/* 未读「下拉到最新」悬浮条 */
+.read-more-bar {
+  position: sticky; bottom: 16px; margin: 10px auto -20px; z-index: 60;
+  display: flex; align-items: center; gap: 8px;
+  width: fit-content; max-width: 90%;
+  padding: 8px 16px; border-radius: 999px;
+  background: linear-gradient(135deg, #4f6ef7, #8b5cf6); color: #fff;
+  font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(79,110,247,0.35);
+  cursor: pointer; user-select: none; transition: transform 0.15s, box-shadow 0.15s;
+}
+.read-more-bar:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(79,110,247,0.5); }
+.read-more-bar .rmb-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #fff;
+  animation: rmb-blink 1s infinite;
+}
+.read-more-bar.running .rmb-dot { background: #ffd166; }
+@keyframes rmb-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* Markdown 渲染 */
 .bubble pre {
@@ -1470,10 +1586,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
   height: 32px;
   border-radius: 6px;
   border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
 }
 .light-preview { background: linear-gradient(135deg, #ffffff 50%, #1e1f22 50%); }
 .dark-preview { background: linear-gradient(135deg, #1a1a1f 50%, #0f0f11 50%); }
 .sepia-preview { background: linear-gradient(135deg, #f5f0e8 50%, #2c2416 50%); }
+.minimal-preview { background: linear-gradient(135deg, #fbfbfc 50%, #b9bcc4 50%); }
 
 /* 字号控制 */
 .font-size-control {
@@ -2225,3 +2344,178 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 
 /* ===== 卡通风景主题预览色块 ===== */
 .cartoon-preview { background: linear-gradient(135deg, #79c6f0 40%, #fff9e3 60%, #7ec850 90%); }
+
+/* ===== 粒子特效主题（深蓝夜色，柔和不晃眼） ===== */
+[data-theme="particles"] {
+  --sidebar-bg: rgba(15, 18, 34, 0.96);
+  --sidebar-text: #aab3d0;
+  --sidebar-hover: #22273f;
+  --primary: #7b8cff;
+  --primary-hover: #6a7cff;
+  --chat-bg: transparent;
+  --chat-text: #e6e9f5;
+  --border: #2a3152;
+  --msg-user-bg: rgba(70, 84, 160, 0.28);
+  --msg-assistant-bg: rgba(24, 30, 60, 0.6);
+  --input-bg: rgba(22, 27, 52, 0.72);
+  --text-secondary: #c2c9e2;
+  --text-muted: #8b93b8;
+  --card-bg: rgba(26, 31, 60, 0.74);
+  --modal-bg: #1a1f38;
+  --modal-overlay: rgba(8, 10, 20, 0.72);
+  --code-bg: #0d1030;
+  --code-text: #d5dbf2;
+}
+/* 深邃星空渐变背景（粒子由画布叠加） */
+[data-theme="particles"] body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(90, 110, 210, 0.22) 0%, rgba(90, 110, 210, 0) 55%),
+    linear-gradient(to bottom, #0b0e22 0%, #12173a 55%, #0e1230 100%);
+  background-attachment: fixed;
+  color: #e6e9f5;
+}
+[data-theme="particles"] #topbar { background: rgba(16, 20, 44, 0.82); border-color: #2a3158; }
+[data-theme="particles"] #input-bar { background: rgba(16, 20, 44, 0.82); border-color: #2a3158; }
+[data-theme="particles"] .modal-content { background: #131838; }
+[data-theme="particles"] #chat-input { background: rgba(22, 27, 52, 0.85); border-color: #2f3769; color: #e6e9f5; }
+[data-theme="particles"] #sidebar { background: #0f1226; border-color: #202642; }
+[data-theme="particles"] .provider-item { background: rgba(24, 29, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .provider-item button { background: #22273f; border-color: #38416e; color: #c2c7e2; }
+[data-theme="particles"] .preset { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; color: #c2c7e2; }
+[data-theme="particles"] .switch-label { background: rgba(22, 27, 52, 0.8); border-color: #2a3158; color: #c2c7e2; }
+[data-theme="particles"] .topbar-right select { background: rgba(22, 27, 52, 0.85); border-color: #2a3158; color: #e6e9f5; }
+[data-theme="particles"] .bubble pre { background: #0d1030; }
+[data-theme="particles"] .tool-card { background: rgba(24, 27, 56, 0.85); border-color: #2a3158; }
+[data-theme="particles"] .tool-card-head { background: rgba(30, 35, 68, 0.9); }
+[data-theme="particles"] .msg.assistant .bubble { border-color: #2a3158; }
+[data-theme="particles"] .msg.user .bubble { background: rgba(70, 84, 160, 0.3); }
+[data-theme="particles"] ::-webkit-scrollbar-thumb { background: #313c6f; }
+[data-theme="particles"] #sidebar ::-webkit-scrollbar-thumb { background: #22273f; }
+[data-theme="particles"] .kb-ref-panel { background: rgba(20, 24, 50, 0.9); border-color: #2a3158; }
+[data-theme="particles"] .kb-ref-search { border-color: #2a3158; }
+[data-theme="particles"] .kb-ref-search input { color: #e6e9f5; }
+[data-theme="particles"] .channel-enabled-card { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .channel-grid-item { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; color: #c2c7e2; }
+[data-theme="particles"] .mode-popup { background: #141a3c; border-color: #2a3158; }
+[data-theme="particles"] .mode-popup-header { border-color: #2a3158; }
+[data-theme="particles"] .mode-option:hover { background: rgba(40, 48, 96, 0.6); }
+[data-theme="particles"] .mode-option-name { color: #e6e9f5; }
+[data-theme="particles"] .mode-option-desc { color: #b6bce0; }
+[data-theme="particles"] .mode-selector-btn { background: rgba(22, 27, 52, 0.85); border-color: #2a3158; color: #e6e9f5; }
+[data-theme="particles"] .ext-item { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .ext-item button.on { background: #7b8cff; color: white; }
+[data-theme="particles"] .sub-form { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .sub-form input, [data-theme="particles"] .sub-form textarea, [data-theme="particles"] .sub-form select { background: rgba(22, 27, 52, 0.85); border-color: #2a3158; color: #e6e9f5; }
+[data-theme="particles"] .tab.active { color: #7b8cff; }
+[data-theme="particles"] .ct-check { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; color: #c2c7e2; }
+[data-theme="particles"] .ct-check.active { border-color: #7b8cff; color: #7b8cff; }
+[data-theme="particles"] .btn-delete { background: rgba(40, 46, 90, 0.7); border-color: #2a3158; color: #aab3d0; }
+[data-theme="particles"] .btn-delete:hover { background: rgba(90, 30, 40, 0.7); border-color: #ef4444; color: #ef4444; }
+[data-theme="particles"] .team-member-card { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .add-form { background: rgba(24, 27, 56, 0.8); }
+[data-theme="particles"] .add-form input, [data-theme="particles"] .add-form select { background: rgba(22, 27, 52, 0.85); border-color: #2a3158; color: #e6e9f5; }
+[data-theme="particles"] .cron-job { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .kb-doc { background: rgba(24, 27, 56, 0.8); border-color: #2a3158; }
+[data-theme="particles"] .welcome-logo { background: linear-gradient(135deg, #7b8cff, #4f6ef7); }
+[data-theme="particles"] .msg.assistant .avatar { background: linear-gradient(135deg, #7b8cff, #8b5cf6); }
+[data-theme="particles"] .msg.user .avatar { background: #39426f; color: #cfe0ff; }
+
+/* 粒子画布：铺满全屏、垫底、不拦截交互 */
+#particle-bg {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  z-index: 0; pointer-events: none; display: none;
+}
+
+/* ===== 粒子特效主题预览色块 ===== */
+.particles-preview { background: linear-gradient(135deg, #0b0e22 40%, #1b2350 100%); box-shadow: inset 0 0 0 1px rgba(123,140,255,0.3); }
+.particles-preview::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background-image: radial-gradient(circle 2px at 30% 35%, rgba(180,200,255,0.8), transparent 60%),
+                    radial-gradient(circle 1.5px at 60% 60%, rgba(160,180,255,0.7), transparent 60%),
+                    radial-gradient(circle 2px at 75% 30%, rgba(200,210,255,0.7), transparent 60%);
+  background-size: 30px 30px;
+}
+
+/* ===== 粒子特效·白昼主题（淡雅，不晃眼） ===== */
+[data-theme="particles-light"] {
+  --sidebar-bg: rgba(235, 240, 255, 0.96);
+  --sidebar-text: #5a678c;
+  --sidebar-hover: #e3eafd;
+  --primary: #5a7bff;
+  --primary-hover: #4a6af0;
+  --chat-bg: transparent;
+  --chat-text: #2e3750;
+  --border: #dce4f7;
+  --msg-user-bg: rgba(214, 226, 255, 0.55);
+  --msg-assistant-bg: rgba(255, 255, 255, 0.7);
+  --input-bg: rgba(255, 255, 255, 0.8);
+  --text-secondary: #64718f;
+  --text-muted: #98a3c2;
+  --card-bg: rgba(255, 255, 255, 0.82);
+  --modal-bg: #f7f9ff;
+  --modal-overlay: rgba(60, 70, 120, 0.3);
+  --code-bg: #232a4d;
+  --code-text: #dde4ff;
+}
+[data-theme="particles-light"] body {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(160, 185, 255, 0.28) 0%, rgba(160, 185, 255, 0) 55%),
+    linear-gradient(to bottom, #f2f5ff 0%, #f8faff 60%, #eef2ff 100%);
+  background-attachment: fixed;
+  color: #2e3750;
+}
+[data-theme="particles-light"] #topbar { background: rgba(255, 255, 255, 0.78); border-color: #dce4f7; }
+[data-theme="particles-light"] #input-bar { background: rgba(255, 255, 255, 0.78); border-color: #dce4f7; }
+[data-theme="particles-light"] .modal-content { background: #f7f9ff; }
+[data-theme="particles-light"] #chat-input { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
+[data-theme="particles-light"] #sidebar { background: rgba(235, 240, 255, 0.96); border-color: #dce4f7; }
+[data-theme="particles-light"] .provider-item { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
+[data-theme="particles-light"] .provider-item button { background: #e6ebff; border-color: #cdd8f5; color: #4a5678; }
+[data-theme="particles-light"] .preset { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; color: #4a5678; }
+[data-theme="particles-light"] .switch-label { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; color: #4a5678; }
+[data-theme="particles-light"] .topbar-right select { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
+[data-theme="particles-light"] .bubble pre { background: #232a4d; }
+[data-theme="particles-light"] .tool-card { background: rgba(255, 255, 255, 0.88); border-color: #dce4f7; }
+[data-theme="particles-light"] .tool-card-head { background: rgba(240, 244, 255, 0.92); }
+[data-theme="particles-light"] .msg.assistant .bubble { border-color: #dce4f7; }
+[data-theme="particles-light"] .msg.user .bubble { background: rgba(214, 226, 255, 0.6); }
+[data-theme="particles-light"] ::-webkit-scrollbar-thumb { background: #c3cff0; }
+[data-theme="particles-light"] #sidebar ::-webkit-scrollbar-thumb { background: #d3dcf7; }
+[data-theme="particles-light"] .kb-ref-panel { background: rgba(255, 255, 255, 0.92); border-color: #dce4f7; }
+[data-theme="particles-light"] .kb-ref-search { border-color: #dce4f7; }
+[data-theme="particles-light"] .kb-ref-search input { color: #2e3750; }
+[data-theme="particles-light"] .channel-enabled-card { background: rgba(255, 255, 255, 0.88); border-color: #dce4f7; }
+[data-theme="particles-light"] .channel-grid-item { background: rgba(255, 255, 255, 0.88); border-color: #dce4f7; color: #4a5678; }
+[data-theme="particles-light"] .mode-popup { background: #fbfcff; border-color: #dce4f7; }
+[data-theme="particles-light"] .mode-popup-header { border-color: #dce4f7; }
+[data-theme="particles-light"] .mode-option:hover { background: rgba(230, 238, 255, 0.8); }
+[data-theme="particles-light"] .mode-option-name { color: #2e3750; }
+[data-theme="particles-light"] .mode-option-desc { color: #64718f; }
+[data-theme="particles-light"] .mode-selector-btn { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
+[data-theme="particles-light"] .ext-item { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
+[data-theme="particles-light"] .ext-item button.on { background: #5a7bff; color: white; }
+[data-theme="particles-light"] .sub-form { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
+[data-theme="particles-light"] .sub-form input, [data-theme="particles-light"] .sub-form textarea, [data-theme="particles-light"] .sub-form select { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
+[data-theme="particles-light"] .tab.active { color: #5a7bff; }
+[data-theme="particles-light"] .ct-check { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; color: #4a5678; }
+[data-theme="particles-light"] .ct-check.active { border-color: #5a7bff; color: #5a7bff; }
+[data-theme="particles-light"] .btn-delete { background: rgba(236, 240, 255, 0.8); border-color: #dce4f7; color: #64718f; }
+[data-theme="particles-light"] .btn-delete:hover { background: #fde8e8; border-color: #ef4444; color: #ef4444; }
+[data-theme="particles-light"] .team-member-card { background: rgba(255, 255, 255, 0.88); border-color: #dce4f7; }
+[data-theme="particles-light"] .add-form { background: rgba(255, 255, 255, 0.85); }
+[data-theme="particles-light"] .add-form input, [data-theme="particles-light"] .add-form select { background: rgba(255, 255, 255, 0.9); border-color: #d5def5; color: #2e3750; }
+[data-theme="particles-light"] .cron-job { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
+[data-theme="particles-light"] .kb-doc { background: rgba(255, 255, 255, 0.85); border-color: #dce4f7; }
+[data-theme="particles-light"] .welcome-logo { background: linear-gradient(135deg, #5a7bff, #8b5cf6); }
+[data-theme="particles-light"] .msg.assistant .avatar { background: linear-gradient(135deg, #5a7bff, #8b5cf6); }
+[data-theme="particles-light"] .msg.user .avatar { background: #dbe4ff; color: #3a4f8f; }
+
+/* ===== 粒子特效·白昼主题预览色块 ===== */
+.particles-light-preview { background: linear-gradient(135deg, #f2f5ff 40%, #dbe6ff 100%); box-shadow: inset 0 0 0 1px rgba(90,123,255,0.3); }
+.particles-light-preview::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background-image: radial-gradient(circle 2px at 35% 40%, rgba(120,150,255,0.65), transparent 60%),
+                    radial-gradient(circle 1.5px at 60% 65%, rgba(140,165,255,0.55), transparent 60%),
+                    radial-gradient(circle 2px at 78% 30%, rgba(110,145,255,0.6), transparent 60%);
+  background-size: 30px 30px;
+}

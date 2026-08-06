@@ -773,7 +773,18 @@ def agent_loop(provider, model, body, rag_context):
             except Exception:
                 args = {}
             yield f"data: {json.dumps({'tool_start': {'name': name, 'args': args}}, ensure_ascii=False)}\n\n"
-            ok, result = dispatch_tool(name, args)
+            # 工具执行兜底：任何异常/非字符串返回值都不允许中断 SSE 流
+            try:
+                ok, result = dispatch_tool(name, args)
+            except Exception as e:
+                ok, result = False, f"工具执行异常: {type(e).__name__}: {e}"
+            if result is None:
+                result = ""
+            if not isinstance(result, str):
+                try:
+                    result = json.dumps(result, ensure_ascii=False)
+                except Exception:
+                    result = str(result)
             yield f"data: {json.dumps({'tool_result': {'name': name, 'ok': ok, 'result': result[:2000]}}, ensure_ascii=False)}\n\n"
             tool_results_msgs.append({
                 "role": "tool",

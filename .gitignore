@@ -22,7 +22,7 @@ macapp/build/
 
 # Windows 构建产物
 dist/
-build/*.exe
+build/
 
 # 操作系统
 .DS_Store
@@ -30,3 +30,8 @@ Thumbs.db
 
 # 本地测试临时文件
 _wftest*.py
+
+# 打包虚拟环境与中间产物
+test_venv/
+build/
+.pytest_cache/
