@@ -9,7 +9,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 APP_NAME = "ABcode"
 DEFAULT_UPDATE_URL = ""
 
