@@ -1741,12 +1741,14 @@ let selectedNode = null;
 let draggingNodeType = null;
 let wfNodeCounter = 0;
 
-// 画布平移
-let wfCanvasPan = { x: 0, y: 0 };
+// 画布平移与缩放
+let wfCanvasPan = { x: 0, y: 0, scale: 1 };
 let wfCanvasPanning = false;
 let wfCanvasPanStart = { x: 0, y: 0 };
 let wfPage = 1;
 const wfPageSize = 20;
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 2;
 
 // 节点连线
 let wfConnecting = false;
