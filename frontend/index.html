@@ -95,14 +95,6 @@
         <span id="streaming-text">正在思考...</span>
       </div>
       <div id="send-queue" class="send-queue" style="display:none"></div>
-      <div id="send-choice" class="send-choice" style="display:none">
-        <span class="send-choice-tip">正在生成回复，如何处理这条消息？</span>
-        <div class="send-choice-btns">
-          <button id="sc-queue-btn">⏳ 排队发送</button>
-          <button id="sc-preempt-btn">⚡ 抢断发送</button>
-          <button id="sc-cancel-btn">✕</button>
-        </div>
-      </div>
       <div class="input-row">
         <textarea id="chat-input" placeholder="" rows="1"></textarea>
       </div>
@@ -125,6 +117,10 @@
           <button id="emoji-btn" class="icon-btn" title="表情">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
           </button>
+          <div id="emoji-popup" class="emoji-popup" style="display:none">
+            <div class="emoji-popup-header">表情</div>
+            <div class="emoji-grid" id="emoji-grid"></div>
+          </div>
           <button id="mode-selector-btn" class="mode-selector-btn">
             <span id="mode-label">默认</span>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4L5 7L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -135,9 +131,6 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
           </button>
           <span id="char-count" class="char-count">0/10000</span>
-          <div id="loading-indicator" class="loading-indicator" style="display:none">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10" /></svg>
-          </div>
           <button id="close-mode-btn" class="close-mode-btn" onclick="toggleCloseMode()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             <span>关闭模式</span>
@@ -422,10 +415,6 @@
               <div style="padding:16px 20px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:8px;">
                   <span style="font-weight:600; font-size:15px; color:#1f2937;">测试</span>
-                  <select id="wf-test-type" style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; color:#374151; background:white; cursor:pointer;">
-                    <option value="chat">文本对话</option>
-                    <option value="completion">文本补全</option>
-                  </select>
                 </div>
                 <button onclick="toggleTestPanel()" style="width:28px; height:28px; border:none; border-radius:6px; background:transparent; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px;">✕</button>
               </div>
@@ -874,9 +863,9 @@
         <span>💾 大小 <b id="kb-stat-size">0 KB</b></span>
       </div>
       <div class="kb-upload">
-        <input type="file" id="kb-file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.py,.js,.ts,.html,.css,.yaml,.yml,.xml,.ini,.conf,.sh,.sql,.c,.cpp,.h,.java,.go,.rs,.php,.rb,.vue,.jsx,.tsx,.toml,.rst,.tex">
+        <input type="file" id="kb-file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.py,.js,.ts,.html,.css,.yaml,.yml,.xml,.ini,.conf,.sh,.sql,.c,.cpp,.h,.java,.go,.rs,.php,.rb,.vue,.jsx,.tsx,.toml,.rst,.tex,.pdf,.docx">
         <button class="btn-save" onclick="uploadKb()">上传文档</button>
-        <p class="hint" style="margin-top:8px">支持 txt/md/csv/json/代码等 30+ 种文本格式（≤10MB）。上传后自动分块索引，提问时用 BM25 算法自动检索相关内容。</p>
+        <p class="hint" style="margin-top:8px">支持 30+ 种文本格式及 PDF/Word（≤10MB）。上传后自动分块索引，提问时用 BM25 算法自动检索相关内容。</p>
       </div>
       <div id="kb-doc-list"></div>
     </div>

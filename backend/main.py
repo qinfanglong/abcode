@@ -831,7 +831,8 @@ async def api_kb_upload(file: UploadFile = File(...)):
     ext = rag._ext(file.filename)
     if ext in rag.UNSUPPORTED_EXTS:
         raise HTTPException(400, f"不支持的文件类型 .{ext}（知识库仅支持文本格式）")
-    if rag._is_binary(content):
+    # PDF/Word 是二进制格式但有专用解析器，放行；其余二进制（伪装文本）拒绝
+    if ext not in ("pdf", "docx") and rag._is_binary(content):
         raise HTTPException(400, f"文件内容是二进制格式（{rag._binary_name(content)}），不是文本文件")
     doc_id, n = rag.add_document(file.filename, content)
     if not doc_id:

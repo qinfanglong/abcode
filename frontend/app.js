@@ -1311,7 +1311,10 @@ async function loadKbDocs() {
     el.className = "kb-doc";
     const t = fmtTime(d.created_at);
     const icon = d.ext === "md" || d.ext === "markdown" ? "📝"
-      : d.ext === "pdf" ? "📕" : d.ext === "doc" || d.ext === "docx" ? "📘" : "📄";
+      : d.ext === "pdf" ? "📕"
+      : d.ext === "doc" || d.ext === "docx" ? "📘"
+      : d.ext === "csv" || d.ext === "tsv" ? "📊"
+      : d.ext === "json" ? "🧾" : "📄";
     el.innerHTML = `
       <div class="kd-main">
         <div class="kd-name">${icon} ${esc(d.name)} <span class="kb-type-tag">${esc(d.type)}</span></div>
@@ -4087,11 +4090,42 @@ function updateSendBtnState() {
   }
 }
 
+function handleWfTestFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  const MAX_FILES = 5;
+  for (const f of Array.from(fileList)) {
+    if (wfTestFiles.length >= MAX_FILES) {
+      alert("最多同时上传 5 个附件");
+      break;
+    }
+    if (f.size > 20 * 1024 * 1024) {
+      alert(`文件过大（>20MB）：${f.name}`);
+      continue;
+    }
+    wfTestFiles.push(f);
+  }
+  renderWfTestFileList();
+  updateSendBtnState();
+}
+
+function renderWfTestFileList() {
+  const fileEl = $("#wf-test-file-list");
+  if (!fileEl) return;
+  fileEl.innerHTML = "";
+  wfTestFiles.forEach((f, idx) => {
+    const chip = document.createElement("span");
+    chip.className = "wf-test-file-chip";
+    chip.innerHTML = `📎 ${esc(f.name)} <span class="wf-test-file-x" data-idx="${idx}" title="移除">✕</span>`;
+    chip.querySelector(".wf-test-file-x").addEventListener("click", () => {
+      wfTestFiles.splice(idx, 1);
+      renderWfTestFileList();
+      updateSendBtnState();
+    });
+    fileEl.appendChild(chip);
+  });
+}
+
 function appendWfTestMsg(role, content, nodeResults) {
-  const emptyEl = $("#wf-test-empty");
-  const msgsEl = $("#wf-test-messages");
-  if (emptyEl) emptyEl.style.display = "none";
-  if (msgsEl) msgsEl.style.display = "block";
   const isUser = role === "user";
   const avatar = isUser ? "U" : "A";
   let nodeHtml = "";
@@ -4136,8 +4170,6 @@ async function executeWfTestFromInput() {
 }
 
 async function executeWfTestWithMessage(text) {
-  const status = $("#wf-test-status"); // 兼容旧弹窗状态元素（可能不存在）
-  if (status) status.textContent = "运行中…";
   // 收集输入
   const startNode = currentWorkflow.nodes.find(n => n.type === "start");
   const fields = (startNode?.config?.input_fields) || ["input"];
@@ -4762,33 +4794,6 @@ async function doSend(text, attachFiles = null) {
   }
 }
 
-// 发送选择浮层：排队 / 抢断 / 取消
-function showSendChoice(text, attachFiles) {
-  const box = $("#send-choice");
-  if (!box) return;
-  $("#sc-queue-btn").onclick = () => {
-    box.style.display = "none";
-    // 即使没有当前对话，也允许排队（发送时自动创建对话）
-    sendQueue.push({ id: ++queueSeq, text, attachFiles });
-    if (attachFiles) { pendingAttachments = []; renderAttachPreview(); }
-    renderQueue();
-    $("#chat-input").value = "";
-    autoResize();
-  };
-  $("#sc-preempt-btn").onclick = () => {
-    box.style.display = "none";
-    // 抢断：插入队首 + 终止当前回复，回复结束后立即发送
-    sendQueue.unshift({ id: ++queueSeq, text, attachFiles });
-    if (attachFiles) { pendingAttachments = []; renderAttachPreview(); }
-    renderQueue();
-    $("#chat-input").value = "";
-    autoResize();
-    if (state.abortController) state.abortController.abort();
-  };
-  $("#sc-cancel-btn").onclick = () => { box.style.display = "none"; };
-  box.style.display = "flex";
-}
-
 // 渲染待发送队列（支持编辑 / 删除）
 function renderQueue() {
   const box = $("#send-queue");
@@ -5196,6 +5201,9 @@ function bindEvents() {
   // 模式选择器
   initModeSelector();
   
+  // 表情选择器
+  initEmojiPicker();
+  
   // 字符计数
   initCharCount();
   
@@ -5243,6 +5251,69 @@ function esc(s) {
 
 function escAttr(s) {
   return esc(s).replace(/'/g, "&#39;");
+}
+
+// ===== 表情选择器 =====
+const EMOJI_SET = [
+  "😀","😁","😂","🤣","😊","😇","🙂","😉",
+  "😍","😘","😜","🤪","😎","🤩","🥳","😏",
+  "😢","😭","😤","😡","🤯","😱","😴","🤗",
+  "🤔","🫡","👍","👎","👏","🙏","💪","🤝",
+  "👋","✌️","🤞","🖐️","❤️","🧡","💛","💚",
+  "💙","💜","🖤","💯","✨","🔥","⭐","🎉",
+  "🎊","🎯","🚀","✅","❌","⚠️","💡","📌",
+  "📎","📚","💻","🧠","🤖","🐛","🔧","🛠️"
+];
+
+function initEmojiPicker() {
+  const btn = $("#emoji-btn");
+  const popup = $("#emoji-popup");
+  const grid = $("#emoji-grid");
+  if (!btn || !popup || !grid) return;
+
+  // 渲染常用表情
+  EMOJI_SET.forEach((e) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = e;
+    b.title = e;
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      insertEmojiAtCursor(e);
+      popup.style.display = "none";
+      btn.classList.remove("active");
+    });
+    grid.appendChild(b);
+  });
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const visible = popup.style.display !== "none";
+    popup.style.display = visible ? "none" : "block";
+    btn.classList.toggle("active", !visible);
+  });
+
+  // 点击外部关闭
+  document.addEventListener("click", (e) => {
+    if (popup.style.display !== "none" && !popup.contains(e.target) && e.target !== btn) {
+      popup.style.display = "none";
+      btn.classList.remove("active");
+    }
+  });
+}
+
+function insertEmojiAtCursor(emoji) {
+  const input = $("#chat-input");
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+  const pos = start + emoji.length;
+  input.selectionStart = input.selectionEnd = pos;
+  input.focus();
+  autoResize(input);
+  // 触发 input 事件，让字符计数等监听同步更新
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 // ===== 模式选择器 =====

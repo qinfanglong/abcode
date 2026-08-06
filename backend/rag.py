@@ -23,8 +23,9 @@ TEXT_EXTS = {
     "c": "C", "cpp": "C++", "h": "头文件", "java": "Java", "go": "Go",
     "rs": "Rust", "php": "PHP", "rb": "Ruby", "vue": "Vue", "jsx": "JSX",
     "tsx": "TSX", "toml": "TOML", "rst": "RST", "tex": "LaTeX",
+    "pdf": "PDF", "docx": "Word", "doc": "Word",
 }
-UNSUPPORTED_EXTS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "zip", "rar", "7z", "png", "jpg", "jpeg", "gif", "bmp", "webp", "mp3", "mp4", "avi", "mov", "wav"}
+UNSUPPORTED_EXTS = {"xls", "xlsx", "ppt", "pptx", "zip", "rar", "7z", "png", "jpg", "jpeg", "gif", "bmp", "webp", "mp3", "mp4", "avi", "mov", "wav"}
 
 # 二进制文件魔数检测（即使扩展名伪装成 txt 也能识别）
 _BINARY_MAGICS = [
@@ -108,8 +109,15 @@ def _decode_content(filename: str, content: bytes):
     if ext in UNSUPPORTED_EXTS:
         return None, ext
     # 魔数检测：伪装成文本的二进制文件也拒绝（避免污染知识库）
-    if _is_binary(content):
+    if ext not in ("pdf", "docx") and _is_binary(content):
         return None, ext
+    # 专用解析器
+    if ext == "pdf":
+        text = _parse_pdf(content)
+        return (text, ext) if text and text.strip() else (None, ext)
+    if ext == "docx":
+        text = _parse_docx(content)
+        return (text, ext) if text and text.strip() else (None, ext)
     # 尝试多种编码
     for enc in ("utf-8", "utf-8-sig", "gb18030", "latin-1"):
         try:
@@ -117,6 +125,49 @@ def _decode_content(filename: str, content: bytes):
         except (UnicodeDecodeError, ValueError):
             continue
     return content.decode("utf-8", errors="ignore"), ext
+
+
+def _parse_pdf(content: bytes):
+    """用 pypdf 提取 PDF 文本（已安装则用，未安装时优雅降级返回 None）"""
+    try:
+        from pypdf import PdfReader
+        import io
+        reader = PdfReader(io.BytesIO(content))
+        parts = []
+        for page in reader.pages:
+            try:
+                t = page.extract_text() or ""
+                if t.strip():
+                    parts.append(t)
+            except Exception:
+                continue
+        return "\n\n".join(parts)
+    except Exception:
+        return None
+
+
+def _parse_docx(content: bytes):
+    """用标准库 zipfile + 正则解析 docx 的 document.xml 文本（无需 python-docx）"""
+    try:
+        import zipfile
+        import io
+        import xml.etree.ElementTree as ET
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
+            if "word/document.xml" not in z.namelist():
+                return None
+            xml_data = z.read("word/document.xml")
+        # 命名空间感知解析：w:t 是文本节点，w:p 是段落
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        root = ET.fromstring(xml_data)
+        parts = []
+        for p in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
+            texts = [t.text or "" for t in p.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")]
+            line = "".join(texts).strip()
+            if line:
+                parts.append(line)
+        return "\n".join(parts)
+    except Exception:
+        return None
 
 
 def _chunk_text(text, size=600, overlap=80):
