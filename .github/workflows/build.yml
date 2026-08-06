@@ -51,84 +51,38 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: 安装 PyInstaller
-        run: |
-          python -m pip install pyinstaller --quiet
-      - name: 构建 Windows 便携包
+      - name: 构建 Windows 源码包
         shell: powershell
         env:
           VERSION: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = "Stop"
-          
-          # Show Python and PyInstaller versions
-          Write-Host "Python version: $(python --version)"
-          Write-Host "PyInstaller version: $(pyinstaller --version)"
-          Write-Host "Current directory: $(Get-Location)"
-          Write-Host "Files in repo: $(Get-ChildItem | ForEach-Object { $_.Name })"
-          
-          # Check backend/main.py exists
-          if (-not (Test-Path "backend/main.py")) {
-            Write-Error "backend/main.py not found!"
-            exit 1
-          }
-          Write-Host "backend/main.py found"
-          
-          # Build executable with PyInstaller (verbose)
-          Write-Host "Building with PyInstaller..."
-          python -m PyInstaller `
-            --onefile `
-            --name ABcode `
-            --icon=build/icon.ico `
-            --add-data "frontend;frontend" `
-            --add-data "backend;backend" `
-            --add-data "backend/requirements.txt;." `
-            --hidden-import=uvicorn `
-            --hidden-import=fastapi `
-            --hidden-import=sqlite3 `
-            --log-level=DEBUG `
-            backend/main.py
-          
-          # Verify exe was created
-          if (-not (Test-Path "dist/ABcode.exe")) {
-            Write-Error "PyInstaller failed - dist/ABcode.exe not found"
-            Write-Host "Contents of dist:"
-            Get-ChildItem dist/ -Force | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
-            exit 1
-          }
-          Write-Host "PyInstaller success: dist/ABcode.exe created ($((Get-Item dist/ABcode.exe).Length) bytes)"
-          
-          # Create portable package (zip)
           $version = $env:VERSION.TrimStart('v')
-          $zipName = "ABcode-windows-${version}.zip"
-          Write-Host "Creating portable package: $zipName"
           
-          # Copy necessary files to a staging directory
-          $staging = "dist_portable"
-          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
-          New-Item -ItemType Directory -Path $staging | Out-Null
+          Write-Host "Creating Windows source packages..."
           
-          Copy-Item dist/ABcode.exe $staging/
-          Copy-Item -Recurse frontend $staging/
-          Copy-Item -Recurse backend $staging/
-          Copy-Item backend/requirements.txt $staging/
-          Copy-Item build/icon.ico $staging/
-          Copy-Item build/start_windows.bat $staging/
+          # Create dist directory
+          New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
           
-          # Create zip
-          Compress-Archive -Path "$staging/*" -DestinationPath "dist/$zipName" -Force
-          Write-Host "Portable package created: dist/$zipName"
+          # Binary package (just the app files)
+          $binaryName = "ABcode-windows-${version}.tar.gz"
+          Write-Host "Creating binary package: $binaryName"
+          tar -czf "dist_windows/$binaryName" backend frontend macapp scripts
+          
+          # Source package (with docs, scripts, etc.)
+          $sourceName = "ABcode-windows-source-${version}.tar.gz"
+          Write-Host "Creating source package: $sourceName"
+          tar -czf "dist_windows/$sourceName" `
+            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
           
           # Verify
-          $zipFile = Get-Item "dist/$zipName"
-          Write-Host "Package size: $($zipFile.Length) bytes"
+          Get-ChildItem dist_windows/ | ForEach-Object { 
+            Write-Host "  $($_.Name) ($($_.Length) bytes)" 
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist/ABcode-windows-*.zip
+          path: dist_windows/*.tar.gz
           if-no-files-found: ignore
 
   release:
