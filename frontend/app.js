@@ -1410,7 +1410,7 @@ async function kbTestSearch() {
     }
     let html = `<div class="kb-test-head">找到 ${results.length} 条相关片段</div>`;
     results.forEach((r) => {
-      const shown = (r.highlight || r.content).slice(0, 300);
+      const shown = (r.highlight || r.snippet || r.content).slice(0, 300);
       html += `<div class="kb-test-item">
         <div class="kti-doc">📄 ${esc(r.doc_name)} <span class="kb-type-tag">${esc(r.doc_type || "文档")}</span> <span class="kti-score">相关度 ${r.score}</span></div>
         <div class="kti-content">${shown}</div>
@@ -1756,8 +1756,8 @@ async function searchKbRef(query) {
     results.forEach((r) => {
       const el = document.createElement("div");
       el.className = "kb-ref-result";
-      // 后端 highlight 字段已含 <mark> 高亮，安全展示
-      const shown = (r.highlight || r.content).slice(0, 400);
+      // 后端 highlight 字段已含 <mark> 高亮，优先用 snippet 中心的片段
+      const shown = (r.highlight || r.snippet || r.content).slice(0, 400);
       el.innerHTML = `
         <div class="krr-doc">📄 ${esc(r.doc_name)} <span class="kb-type-tag">${esc(r.doc_type || "文档")}</span> <span class="krr-score">${r.score}</span></div>
         <div class="krr-content">${shown}</div>`;
@@ -1771,7 +1771,8 @@ async function searchKbRef(query) {
 
 function insertKbRef(result) {
   const input = $("#chat-input");
-  const ref = `\n[引用知识库「${result.doc_name}」]\n${result.content}\n[/引用]\n`;
+  const content = (result.snippet || result.content || "").trim();
+  const ref = `\n[引用知识库「${result.doc_name}」]\n${content}\n[/引用]\n`;
   const pos = input.selectionStart;
   input.value = input.value.slice(0, pos) + ref + input.value.slice(pos);
   input.focus();

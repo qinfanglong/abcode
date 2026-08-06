@@ -453,10 +453,42 @@ def search(query, top_k=5):
             "chunk_id": ch_id,
             "chunk_idx": meta["idx"],
             "content": content[:1200],
+            "snippet": _snippet(content, hits, 400),
             "hits": hits[:8],
             "score": round(score, 2),
         })
     return results
+
+
+def _snippet(content, hits, max_len=400):
+    """生成以首个命中词为中心（往前找起点）的摘要片段，避免命中内容被截断看不到"""
+    content = re.sub(r"\s+", " ", content).strip()
+    if len(content) <= max_len:
+        return content
+    # 找到第一个命中词的位置
+    pos = -1
+    for t in hits:
+        p = content.lower().find(t.lower())
+        if p >= 0:
+            pos = p
+            break
+    if pos < 0:
+        return content[:max_len]
+    # 从命中词前 150 字符开始，尽量从句子边界开始
+    start = max(0, pos - 150)
+    if start > 0:
+        # 尝试在附近找上一个句号/换行，作为自然起点
+        for sep in ("。", ". ", "！", "？", "；"):
+            idx = content.rfind(sep, max(0, start - 60), pos)
+            if idx > 0:
+                start = idx + len(sep)
+                break
+    snippet = content[start:start + max_len]
+    if start > 0:
+        snippet = "…" + snippet
+    if start + max_len < len(content):
+        snippet += "…"
+    return snippet
 
 
 def search_with_highlight(query, top_k=5):
@@ -469,7 +501,8 @@ def search_with_highlight(query, top_k=5):
     hl_terms = [t for t in q_terms if len(t) >= 2]
     hl_terms.sort(key=len, reverse=True)
     for r in results:
-        content = r["content"]
+        # 基于 snippet（命中词为中心的上下文片段）做高亮，避免命中内容被截断
+        content = r["snippet"] or r["content"]
         # 找出所有命中位置，合并重叠区间
         spans = []
         for t in hl_terms:
@@ -496,10 +529,27 @@ def search_with_highlight(query, top_k=5):
     return results
 
 
-def build_context(query, top_k=4):
-    """构建 RAG 上下文文本，无匹配返回 None"""
-    results = search(query, top_k)
+def build_context(query, top_k=4, per_doc=2):
+    """构建 RAG 上下文文本（聊天注入用），无匹配返回 None。
+    top_k 总片段数上限；per_doc 同一文档最多取片段数，避免单个文档垄断上下文。
+    """
+    results = search(query, top_k * 2)
     if not results:
         return None
-    parts = [f"[{r['doc_name']}] {r['content']}" for r in results]
+    # 按文档聚合，每文档最多 per_doc 块
+    picked = []
+    counts = {}
+    for r in results:
+        doc_id = r["doc_id"]
+        if counts.get(doc_id, 0) >= per_doc:
+            continue
+        counts[doc_id] = counts.get(doc_id, 0) + 1
+        picked.append(r)
+        if len(picked) >= top_k:
+            break
+    if not picked:
+        return None
+    parts = []
+    for i, r in enumerate(picked, 1):
+        parts.append(f"[{i}]《{r['doc_name']}》(相关度{r['score']:.2f})\n{r['content']}")
     return "\n\n---\n\n".join(parts)
