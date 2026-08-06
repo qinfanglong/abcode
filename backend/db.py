@@ -1405,6 +1405,13 @@ def list_workflow_executions(wid=None, limit=50):
 
 def save_workflow_execution(execution):
     conn = get_conn()
+    # output/error 可能是 dict（start 节点输出对象），必须序列化后才能绑定 SQLite
+    output_val = execution.get("output", "")
+    if not isinstance(output_val, str):
+        output_val = json.dumps(output_val, ensure_ascii=False, default=str)
+    error_val = execution.get("error", "")
+    if not isinstance(error_val, str):
+        error_val = json.dumps(error_val, ensure_ascii=False, default=str)
     conn.execute("""INSERT INTO workflow_executions (id, workflow_id, input, output, status, nodes_status, node_requests, error, started_at, completed_at, duration_ms, tokens_used)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
@@ -1412,10 +1419,10 @@ def save_workflow_execution(execution):
                       node_requests=excluded.node_requests, error=excluded.error, completed_at=excluded.completed_at,
                       duration_ms=excluded.duration_ms, tokens_used=excluded.tokens_used""",
                  (execution["id"], execution["workflow_id"],
-                  json.dumps(execution.get("input", {})), execution.get("output", ""),
+                  json.dumps(execution.get("input", {})), output_val,
                   execution.get("status", "pending"), json.dumps(execution.get("nodes_status", {})),
                   json.dumps(execution.get("node_requests", {})),
-                  execution.get("error", ""), execution.get("started_at", time.time()),
+                  error_val, execution.get("started_at", time.time()),
                   execution.get("completed_at"), execution.get("duration_ms", 0),
                   execution.get("tokens_used", 0)))
     conn.commit()
