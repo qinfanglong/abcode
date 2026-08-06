@@ -52,37 +52,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: 构建 Windows 源码包
-        shell: bash
+        shell: powershell
         env:
           VERSION: ${{ github.ref_name }}
         run: |
-          set -euo pipefail
-          version="${VERSION#v}"
+          $ErrorActionPreference = "Stop"
+          $version = $env:VERSION.TrimStart('v')
           
-          echo "Checking tar..."
-          tar --version
-          echo "Current directory: $(pwd)"
-          echo "Files: $(ls -la)"
+          Write-Host "Creating Windows packages..."
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Files: $(Get-ChildItem -Name)"
           
-          mkdir -p dist_windows
+          # Create dist directory
+          New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
           
           # Binary package
-          binaryName="ABcode-windows-${version}.tar.gz"
-          echo "Creating binary package: $binaryName"
-          tar -czf "dist_windows/$binaryName" backend frontend macapp scripts
+          $binaryName = "ABcode-windows-${version}.zip"
+          Write-Host "Creating binary package: $binaryName"
+          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "scripts/*" -DestinationPath "dist_windows/$binaryName" -Force
           
           # Source package
-          sourceName="ABcode-windows-source-${version}.tar.gz"
-          echo "Creating source package: $sourceName"
-          tar -czf "dist_windows/$sourceName" \
-            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
+          $sourceName = "ABcode-windows-source-${version}.zip"
+          Write-Host "Creating source package: $sourceName"
+          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "requirements.txt", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist_windows/$sourceName" -Force
           
           # Verify
-          ls -la dist_windows/
+          Get-ChildItem dist_windows/ | ForEach-Object { 
+            Write-Host "  $($_.Name) ($($_.Length) bytes)" 
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist_windows/*.tar.gz
+          path: dist_windows/*.zip
           if-no-files-found: ignore
 
   release:
