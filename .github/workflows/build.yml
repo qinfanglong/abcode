@@ -61,66 +61,42 @@ jobs:
           
           Write-Host "Checking available tools..."
           Write-Host "7z: $(Get-Command 7z -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)"
-          Write-Host "tar: $(Get-Command tar -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)"
           Write-Host "Current directory: $(Get-Location)"
-          Write-Host "Files: $(Get-ChildItem | ForEach-Object { $_.Name })"
-          
-          # Check directories exist
-          $dirs = @("backend", "frontend", "macapp", "scripts", "docs", "build")
-          foreach ($d in $dirs) {
-            if (Test-Path $d) {
-              Write-Host "Directory $d exists"
-            } else {
-              Write-Host "Directory $d NOT found"
-            }
-          }
-          
-          # Check files
-          $files = @("start.sh", "start.bat", "requirements.txt", "README.md", "CHANGELOG.md", "LICENSE")
-          foreach ($f in $files) {
-            if (Test-Path $f) {
-              Write-Host "File $f exists"
-            } else {
-              Write-Host "File $f NOT found"
-            }
-          }
-          
-          Write-Host "Creating Windows source packages..."
           
           # Create dist directory
           New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
           
-          # Use 7-Zip if available, otherwise use tar
-          $use7z = $false
-          if (Get-Command 7z -ErrorAction SilentlyContinue) {
-            $use7z = $true
-            Write-Host "Using 7-Zip for compression"
-          } else {
-            Write-Host "Using tar for compression"
-          }
-          
-          # Binary package (just the app files)
+          # Simple approach: zip the whole repo (excluding .git)
           $binaryName = "ABcode-windows-${version}.zip"
-          Write-Host "Creating binary package: $binaryName"
-          if ($use7z) {
-            & 7z a -tzip "dist_windows/$binaryName" backend frontend macapp scripts
-          } else {
-            Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "scripts/*" -DestinationPath "dist_windows/$binaryName" -Force
-          }
+          Write-Host "Creating package: $binaryName"
           
-          # Source package (with docs, scripts, etc.)
-          $sourceName = "ABcode-windows-source-${version}.zip"
-          Write-Host "Creating source package: $sourceName"
-          if ($use7z) {
-            & 7z a -tzip "dist_windows/$sourceName" backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
+          # Use 7z if available
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+            Write-Host "Using 7-Zip"
+            & 7z a -tzip "dist_windows/$binaryName" . -xr!.git -xr!dist_windows -xr!__pycache__ -xr!.venv -xr!node_modules
           } else {
-            Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "requirements.txt", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist_windows/$sourceName" -Force
+            Write-Host "Using Compress-Archive"
+            # Create a temp directory with files to zip
+            $tempDir = "dist_windows_temp"
+            if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+            New-Item -ItemType Directory -Path $tempDir | Out-Null
+            
+            # Copy all files except exclusions
+            Get-ChildItem -File -Recurse | Where-Object { 
+              $_.FullName -notmatch '\\.git\\' -and 
+              $_.FullName -notmatch '\\dist_windows\\' -and
+              $_.FullName -notmatch '__pycache__' -and
+              $_.FullName -notmatch '\\.venv\\' -and
+              $_.FullName -notmatch 'node_modules'
+            } | Copy-Item -Destination $tempDir -Recurse -Force
+            
+            Compress-Archive -Path "$tempDir/*" -DestinationPath "dist_windows/$binaryName" -Force
+            Remove-Item $tempDir -Recurse -Force
           }
           
           # Verify
-          Get-ChildItem dist_windows/ | ForEach-Object { 
-            Write-Host "  $($_.Name) ($($_.Length) bytes)" 
-          }
+          $zipFile = Get-Item "dist_windows/$binaryName"
+          Write-Host "Package created: $($zipFile.Name) ($($zipFile.Length) bytes)"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
