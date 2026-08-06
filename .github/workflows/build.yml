@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.9'
       - name: 构建 Mac .app + DMG
         run: |
           chmod +x build_mac.sh
@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.9'
       - name: 安装系统依赖
         run: |
           sudo apt-get update
@@ -63,6 +63,7 @@ jobs:
             --hidden-import=sqlite3 \
             --hidden-import=websockets \
             --hidden-import=httpx \
+            --hidden-import=workflow_mod \
             backend/main.py
       - name: 创建 AppImage
         run: |
@@ -122,7 +123,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.9'
       - name: 安装 PyInstaller 和 NSIS
         run: |
           python -m pip install pyinstaller --quiet
@@ -146,6 +147,7 @@ jobs:
             --hidden-import=sqlite3 `
             --hidden-import=websockets `
             --hidden-import=httpx `
+            --hidden-import=workflow_mod `
             backend/main.py
           
           if (-not (Test-Path "dist/ABcode.exe")) {
