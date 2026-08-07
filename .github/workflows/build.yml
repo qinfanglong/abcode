@@ -199,7 +199,14 @@ jobs:
             $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
           }
           Write-Host "makensis: $nsisPath"
-          & $nsisPath -DVERSION="$version" build/installer.nsi
+          # 输出到文件，失败时把末尾诊断写入 ::error:: annotation
+          & $nsisPath "-DVERSION=$version" build/installer.nsi *>&1 | Tee-Object -FilePath makensis.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $tail = (Get-Content makensis.log -ErrorAction SilentlyContinue | Select-Object -Last 30) -join " | "
+            Write-Host "::error title=makensis exit=$code::$tail"
+            exit 1
+          }
           
           # 验证安装包
           $installer = Get-ChildItem dist/ABcode-Setup-*.exe -ErrorAction SilentlyContinue

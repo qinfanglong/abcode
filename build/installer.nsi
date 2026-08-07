@@ -1,5 +1,5 @@
 ; ABcode Windows Installer Script (NSIS)
-; Compile with: makensis /DVERSION="0.4.0" installer.nsi
+; Compile with: makensis -DVERSION="0.4.0" installer.nsi
 
 !define APP_NAME "ABcode"
 !ifndef VERSION
@@ -17,15 +17,15 @@
 
 ; General settings
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "dist\ABcode-Setup-${APP_VERSION}.exe"
+OutFile "dist/ABcode-Setup-${APP_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" ""
 RequestExecutionLevel user
 
 ; Interface settings
-!define MUI_ICON "build\icon.ico"
-!define MUI_UNICON "build\icon.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "build\banner.bmp"
+!define MUI_ICON "build/icon.ico"
+!define MUI_UNICON "build/icon.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "build/banner.bmp"
 !define MUI_WELCOMEPAGE_TITLE "欢迎安装 ${APP_NAME}"
 !define MUI_WELCOMEPAGE_TEXT "本向导将引导您安装 ${APP_NAME} ${APP_VERSION}。\n\n点击下一步继续。"
 !define MUI_FINISHPAGE_TITLE "安装完成"
@@ -51,11 +51,11 @@ RequestExecutionLevel user
 ; Installer sections
 Section "MainSection" SEC_MAIN
     SetOutPath "$INSTDIR"
-    File /r "dist\ABcode.exe"
-    File /r "frontend\*"
-    File /r "backend\*"
-    File "backend\requirements.txt"
-    File "build\icon.ico"
+    File /r "dist/ABcode.exe"
+    File /r "frontend/*"
+    File /r "backend/*"
+    File "backend/requirements.txt"
+    File "build/icon.ico"
     
     ; Create start script
     File "build\start_windows.bat"
@@ -96,9 +96,7 @@ Section "Uninstall"
 SectionEnd
 
 Function .onInit
-    ; Check if already running
-    ${GetProcessName} "$EXEPATH" $R0
-    StrCmp $R0 "${APP_EXE}" 0 +2
-    MessageBox MB_OK|MB_ICONEXCLAMATION "${APP_NAME} 正在运行，请先关闭后再安装。"
-    Abort
+    ; 已安装且文件存在时给出提示（简化检测，避免对进程名宏的跨平台依赖）
+    IfFileExists "$INSTDIR\${APP_EXE}" 0 +2
+    MessageBox MB_OK|MB_ICONEXCLAMATION "${APP_NAME} 似乎已安装。若正在运行，请先关闭后再安装。"
 FunctionEnd
