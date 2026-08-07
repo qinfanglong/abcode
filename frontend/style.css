@@ -3125,3 +3125,50 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
                     radial-gradient(circle 2px at 78% 30%, rgba(110,145,255,0.6), transparent 60%);
   background-size: 30px 30px;
 }
+
+/* ===== 智能体回答来源 & 回复干预 ===== */
+.agent-sources {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border, rgba(120,130,160,0.25));
+  font-size: 12px;
+  color: var(--text-secondary, #8a93a6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.source-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--input-bg, rgba(255,255,255,0.06));
+  border: 1px solid var(--border, rgba(120,130,160,0.25));
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: default;
+}
+.source-tag i {
+  font-style: normal;
+  color: #60a5fa;
+  font-size: 10px;
+}
+.btn-edit-reply {
+  display: inline-block;
+  margin-top: 8px;
+  margin-right: 6px;
+  background: transparent;
+  border: 1px dashed var(--border, rgba(120,130,160,0.4));
+  color: var(--text-secondary, #8a93a6);
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-edit-reply:hover {
+  border-color: #60a5fa;
+  color: #60a5fa;
+  background: rgba(96,165,250,0.08);
+}

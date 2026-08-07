@@ -381,7 +381,11 @@ async function showAgentDetail(aid) {
   $$("#agent-list .agent-list-item").forEach(el => el.classList.toggle("active", el.dataset.aid === aid));
   const panel = $("#agent-detail-panel");
   const tools = (a.builtin_tools || []).map(t => `<span class="expert-tool-tag">${esc(t)}</span>`).join('') || '<span class="expert-tool-tag">无</span>';
-  const kb = (a.kb_ids || []).length ? a.kb_ids.join(', ') : '未绑定';
+  const meta = await ensureAgentBindMeta();
+  const skills = (a.skill_ids || []).map(sid => `<span class="expert-tool-tag">🧩 ${esc(bindName(meta.skills, sid))}</span>`).join('') || '<span class="expert-tool-tag">无</span>';
+  const kb = (a.kb_ids || []).length ? (a.kb_ids || []).map(k => `<span class="expert-tool-tag">📚 ${esc(bindName(meta.kbs, k))}</span>`).join('') : '<span class="expert-tool-tag">未绑定</span>';
+  const mcp = (a.mcp_ids || []).length ? (a.mcp_ids || []).map(m => `<span class="expert-tool-tag">🔌 ${esc(bindName(meta.mcps, m))}</span>`).join('') : '<span class="expert-tool-tag">无</span>';
+  const wf = a.workflow_id ? `<span class="expert-tool-tag">⚙️ ${esc(bindName(meta.wfs, a.workflow_id))}</span>` : '<span class="expert-tool-tag">未绑定</span>';
   const subs = (a.sub_agents || []).length ? a.sub_agents.join(', ') : '无';
   panel.innerHTML = `
     <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
@@ -403,7 +407,10 @@ async function showAgentDetail(aid) {
       </div>
       <div class="agent-info-card">
         <div class="agent-info-label">可用工具</div><div>${tools}</div>
-        <div class="agent-info-label">知识库</div><div>${esc(kb)}</div>
+        <div class="agent-info-label">技能</div><div>${skills}</div>
+        <div class="agent-info-label">知识库</div><div>${kb}</div>
+        <div class="agent-info-label">MCP</div><div>${mcp}</div>
+        <div class="agent-info-label">绑定工作流</div><div>${wf}</div>
         <div class="agent-info-label">子Agent</div><div>${esc(subs)}</div>
       </div>
     </div>
@@ -452,13 +459,33 @@ async function openAgentChat(aid) {
   localStorage.setItem("abcode-conv-agent", data.id + "|" + aid);
 }
 
-function agentFormTemplate(a) {
+function agentFormTemplate(a, meta) {
   a = a || {};
+  meta = meta || { skills: [], kbs: [], mcps: [], wfs: [] };
   const catOptions = agentCats.map(([v, label]) => `<option value="${v}" ${a.category === v ? 'selected' : ''}>${label}</option>`).join('');
   const toolChecks = (window._agentToolNames || ["shell","file_read","file_write","list_files","web_search","fetch_url"]).map(t =>
     `<label style="display:inline-flex; align-items:center; gap:4px; margin:4px 8px 4px 0; font-size:12px;">
       <input type="checkbox" class="agt-tool-cb" value="${t}" ${(a.builtin_tools || []).includes(t) ? 'checked' : ''}> ${t}
     </label>`).join('');
+  
+  // 技能多选
+  const skillChecks = (meta.skills || []).map(s =>
+    `<label style="display:inline-flex; align-items:center; gap:4px; margin:4px 8px 4px 0; font-size:12px;">
+      <input type="checkbox" class="agt-skill-cb" value="${s.id}" ${(a.skill_ids || []).includes(s.id) ? 'checked' : ''}> ${esc(s.name || s.id)}${s.enabled === 0 ? '（停用）' : ''}
+    </label>`).join('') || '<span style="font-size:12px; color:var(--text-muted);">暂无技能（可在「技能」页创建）</span>';
+  // 知识库多选
+  const kbChecks = (meta.kbs || []).map(k =>
+    `<label style="display:inline-flex; align-items:center; gap:4px; margin:4px 8px 4px 0; font-size:12px;">
+      <input type="checkbox" class="agt-kb-cb" value="${k.id}" ${(a.kb_ids || []).includes(k.id) ? 'checked' : ''}> ${esc(k.name || k.id)}<span style="color:var(--text-muted);">(${k.doc_count || 0} 文档)</span>
+    </label>`).join('') || '<span style="font-size:12px; color:var(--text-muted);">暂无知识库</span>';
+  // MCP 多选
+  const mcpChecks = (meta.mcps || []).map(m =>
+    `<label style="display:inline-flex; align-items:center; gap:4px; margin:4px 8px 4px 0; font-size:12px;">
+      <input type="checkbox" class="agt-mcp-cb" value="${m.id}" ${(a.mcp_ids || []).includes(m.id) ? 'checked' : ''}> ${esc(m.name || m.id)}
+    </label>`).join('') || '<span style="font-size:12px; color:var(--text-muted);">暂无 MCP 服务器</span>';
+  // 工作流下拉
+  const wfOptions = '<option value="">不绑定</option>' + (meta.wfs || []).map(w =>
+    `<option value="${w.id}" ${a.workflow_id === w.id ? 'selected' : ''}>${esc(w.name || w.id)}</option>`).join('');
   
   // 构建模型下拉列表（分组：本地/网络）
   const allProviders = state.providers || [];
@@ -500,6 +527,10 @@ function agentFormTemplate(a) {
     <div style="margin-top:10px;"><label class="agent-info-label">分类</label><select id="agt-category" class="ncf-input">${catOptions}<option value="general" ${!a.category || a.category === 'general' ? 'selected' : ''}>通用</option></select></div>
     <div style="margin-top:10px;"><label class="agent-info-label">系统提示词</label><textarea id="agt-prompt" class="ncf-input" rows="5" placeholder="定义智能体的角色、能力、工作流程...">${esc(a.system_prompt || '')}</textarea></div>
     <div style="margin-top:10px;"><label class="agent-info-label">内置工具</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${toolChecks}</div></div>
+    <div style="margin-top:10px;"><label class="agent-info-label">🧩 技能（可多选）</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${skillChecks}</div></div>
+    <div style="margin-top:10px;"><label class="agent-info-label">📚 知识库（可多选）</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${kbChecks}</div></div>
+    <div style="margin-top:10px;"><label class="agent-info-label">🔌 MCP 服务器（可多选）</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${mcpChecks}</div></div>
+    <div style="margin-top:10px;"><label class="agent-info-label">⚙️ 绑定工作流</label><select id="agt-workflow" class="ncf-input">${wfOptions}</select></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
       <div><label class="agent-info-label">模型偏好（可选）</label><select id="agt-model" class="ncf-input" style="max-height:120px;">${modelOptions}</select></div>
       <div><label class="agent-info-label">温度</label><input id="agt-temp" class="ncf-input" type="number" step="0.1" min="0" max="2" value="${a.temperature ?? 0.7}"></div>
@@ -519,15 +550,39 @@ function agentFormTemplate(a) {
   `;
 }
 
+// 智能体绑定元数据（技能/知识库/MCP/工作流名称映射）
+let _agentBindMeta = null;
+
+async function ensureAgentBindMeta() {
+  if (_agentBindMeta) return _agentBindMeta;
+  const [skills, kbs, mcps, wfs] = await Promise.all([
+    api("/api/skills").catch(() => []),
+    api("/api/kb/list").catch(() => []),
+    api("/api/mcp/servers").catch(() => []),
+    api("/api/workflows").catch(() => []),
+  ]);
+  _agentBindMeta = { skills, kbs, mcps, wfs };
+  return _agentBindMeta;
+}
+
+function bindName(list, id) {
+  const it = (list || []).find(x => x.id === id);
+  return it ? (it.name || it.id) : id;
+}
+
 function openAgentForm(aid) {
   if (aid) {
     api(`/api/agents/${aid}`).then(a => {
       agentEditing = a;
-      $("#agent-detail-panel").innerHTML = agentFormTemplate(a);
+      ensureAgentBindMeta().then(meta => {
+        $("#agent-detail-panel").innerHTML = agentFormTemplate(a, meta);
+      });
     });
   } else {
     agentEditing = null;
-    $("#agent-detail-panel").innerHTML = agentFormTemplate(null);
+    ensureAgentBindMeta().then(meta => {
+      $("#agent-detail-panel").innerHTML = agentFormTemplate(null, meta);
+    });
   }
 }
 
@@ -541,6 +596,10 @@ async function saveAgent() {
     category: $("#agt-category").value,
     system_prompt: $("#agt-prompt").value,
     builtin_tools: Array.from($$("#agent-detail-panel .agt-tool-cb:checked")).map(cb => cb.value),
+    skill_ids: Array.from($$("#agent-detail-panel .agt-skill-cb:checked")).map(cb => cb.value),
+    kb_ids: Array.from($$("#agent-detail-panel .agt-kb-cb:checked")).map(cb => cb.value),
+    mcp_ids: Array.from($$("#agent-detail-panel .agt-mcp-cb:checked")).map(cb => cb.value),
+    workflow_id: ($("#agt-workflow") || {}).value || "",
     model_preference: $("#agt-model").value.trim(),
     temperature: parseFloat($("#agt-temp").value) || 0.7,
     max_context: parseInt($("#agt-ctx").value) || 128000,
@@ -5130,6 +5189,32 @@ async function doSend(text, attachFiles = null) {
           done = true;
         } else if (payload.done) {
           done = true;
+          // 显示回答来源（知识库引用）
+          const sources = payload.sources || [];
+          const b = holder.querySelector(".bubble");
+          if (sources.length > 0 && b) {
+            const srcHtml = `<div class="agent-sources">📚 回答来源：${sources.map(s =>
+              `<span class="source-tag" title="${esc(s.snippet || '')}">📄 ${esc(s.doc_name || '未知')}${s.score != null ? ` <i>${(s.score * 100).toFixed(0)}%</i>` : ''}</span>`).join(' ')}</div>`;
+            const wrap = document.createElement("div");
+            wrap.innerHTML = srcHtml;
+            b.appendChild(wrap.firstChild);
+          }
+          // 回复干预：编辑/修改 AI 回复后重发
+          if (acc && b && !acc.includes("⚠")) {
+            const editBtn = document.createElement("button");
+            editBtn.className = "btn-edit-reply";
+            editBtn.innerHTML = "✏️ 干预回复";
+            editBtn.title = "把回复放入输入框，修改后重新发送";
+            editBtn.onclick = () => {
+              const input = $("#chat-input");
+              if (input) {
+                input.value = acc;
+                input.focus();
+                if (window.resizeInput) resizeInput(input);
+              }
+            };
+            b.appendChild(editBtn);
+          }
         }
       }
       if (done) break;

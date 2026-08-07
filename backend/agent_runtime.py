@@ -70,6 +70,7 @@ class AgentConfig:
     skill_ids: List[str] = field(default_factory=list)         # 技能插件
     mcp_ids: List[str] = field(default_factory=list)           # MCP 服务
     connector_ids: List[str] = field(default_factory=list)     # 数据连接器
+    workflow_id: str = ""                                      # 绑定工作流
     
     # 知识库
     kb_ids: List[str] = field(default_factory=list)
@@ -403,6 +404,8 @@ class ToolRegistry:
         
         # 1. 内置工具
         for tool_name in self.config.builtin_tools:
+            if tool_name in self._tool_map:
+                continue
             if tool_name in agent.TOOL_NAMES:
                 t = next(t for t in agent.TOOLS if t["function"]["name"] == tool_name)
                 tools.append(t)
@@ -414,6 +417,8 @@ class ToolRegistry:
             skill_tools = skills_mod.skill_tools_for(self.config.skill_ids)
             for t in skill_tools:
                 name = t["function"]["name"]
+                if name in self._tool_map:
+                    continue
                 tools.append(t)
                 self._tool_map[name] = t
                 self._executor_map[name] = ("skill", name)
@@ -423,6 +428,8 @@ class ToolRegistry:
             mcp_tools = mcp_client.mcp_tools_for(self.config.mcp_ids)
             for t in mcp_tools:
                 name = t["function"]["name"]
+                if name in self._tool_map:
+                    continue
                 tools.append(t)
                 self._tool_map[name] = t
                 self._executor_map[name] = ("mcp", name)
@@ -432,9 +439,31 @@ class ToolRegistry:
             conn_tools = connector_mod.connector_tools_for(self.config.connector_ids)
             for t in conn_tools:
                 name = t["function"]["name"]
+                if name in self._tool_map:
+                    continue
                 tools.append(t)
                 self._tool_map[name] = t
                 self._executor_map[name] = ("connector", name)
+        
+        # 4.5 绑定工作流工具
+        if self.config.workflow_id and "run_workflow" not in self._tool_map:
+            wf_tool = {
+                "type": "function",
+                "function": {
+                    "name": "run_workflow",
+                    "description": "运行绑定的工作流，input 为工作流入参（JSON 对象）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "input": {"type": "object", "description": "工作流输入参数，键为开始节点配置的 input_fields"}
+                        },
+                        "required": ["input"]
+                    }
+                }
+            }
+            tools.append(wf_tool)
+            self._tool_map["run_workflow"] = wf_tool
+            self._executor_map["run_workflow"] = ("workflow", self.config.workflow_id)
         
         self._built_tools = True
         return tools
@@ -464,6 +493,12 @@ class ToolRegistry:
                 if exec_name in cmap:
                     return connector_mod.execute_connector_tool(cmap[exec_name][1], exec_name, args)
                 return False, f"连接器工具不存在: {exec_name}"
+            elif exec_type == "workflow":
+                from workflow_mod import execute_workflow
+                result = execute_workflow(exec_name, args.get("input") or {})
+                if result.get("success"):
+                    return True, result.get("output", "")
+                return False, result.get("error", "工作流执行失败")
         except Exception as e:
             return False, f"工具执行异常: {e}"
         
@@ -579,13 +614,27 @@ class AgentRuntime:
         
         # RAG 知识库
         rag_context = ""
+        self._last_sources = []
         if self.config.kb_ids:
-            results = rag.search(user_input, top_k=self.config.kb_top_k)
+            results = []
+            for kb_id in self.config.kb_ids:
+                try:
+                    results.extend(rag.search(user_input, top_k=self.config.kb_top_k, kb_id=kb_id,
+                                              min_score=self.config.kb_score_threshold))
+                except Exception:
+                    continue
+            results.sort(key=lambda r: -r["score"])
+            results = results[:self.config.kb_top_k]
             if results:
                 lines = []
                 for i, r in enumerate(results):
-                    if r.get("score", 0) >= self.config.kb_score_threshold:
-                        lines.append(f"[{i+1}] 《{r['doc_name']}》 相关度{r['score']:.2f}\n{r['content']}")
+                    lines.append(f"[{i+1}] 《{r['doc_name']}》 相关度{r['score']:.2f}\n{r['content']}")
+                    self._last_sources.append({
+                        "doc_id": r.get("doc_id", ""),
+                        "doc_name": r.get("doc_name", ""),
+                        "score": r.get("score", 0),
+                        "snippet": r.get("snippet", r.get("content", ""))[:200],
+                    })
                 if lines:
                     rag_context = "\n\n".join(lines)
         
@@ -669,7 +718,8 @@ class AgentRuntime:
                     # 结束
                     with self._lock:
                         self.state.status = AgentStatus.COMPLETED
-                    yield {"type": "done", "content": text, "total_tokens": self.state.total_tokens}
+                    yield {"type": "done", "content": text, "total_tokens": self.state.total_tokens,
+                           "sources": getattr(self, "_last_sources", [])}
                     return
                 
                 # 执行工具
@@ -947,6 +997,7 @@ class AgentManager:
             skill_ids TEXT DEFAULT '[]',
             mcp_ids TEXT DEFAULT '[]',
             connector_ids TEXT DEFAULT '[]',
+            workflow_id TEXT DEFAULT '',
             kb_ids TEXT DEFAULT '[]',
             kb_top_k INTEGER DEFAULT 5,
             kb_score_threshold REAL DEFAULT 0.5,
@@ -980,6 +1031,13 @@ class AgentManager:
             updated_at REAL
         );
         """)
+        # 兼容旧表：补充新增列
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(agents)").fetchall()]
+        if cols and "workflow_id" not in cols:
+            try:
+                conn.execute("ALTER TABLE agents ADD COLUMN workflow_id TEXT DEFAULT ''")
+            except Exception:
+                pass
         conn.commit()
         conn.close()
     
@@ -994,16 +1052,16 @@ class AgentManager:
         conn = db.get_conn()
         conn.execute("""INSERT INTO agents 
             (id,name,description,icon,category,system_prompt,model_preference,max_context,temperature,top_p,
-             builtin_tools,skill_ids,mcp_ids,connector_ids,kb_ids,kb_top_k,kb_score_threshold,
+             builtin_tools,skill_ids,mcp_ids,connector_ids,workflow_id,kb_ids,kb_top_k,kb_score_threshold,
              memory_enabled,short_term_turns,long_term_summary_interval,user_profile_enabled,
              max_rounds,max_tokens_per_round,stop_sequences,sub_agents,collaboration_mode,
              prompt_templates,response_format,enable_reasoning,auto_approve_tools,
              is_builtin,enabled,version,created_by,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (config.id, config.name, config.description, config.icon, config.category,
              config.system_prompt, config.model_preference, config.max_context, config.temperature, config.top_p,
              json.dumps(config.builtin_tools), json.dumps(config.skill_ids), json.dumps(config.mcp_ids),
-             json.dumps(config.connector_ids), json.dumps(config.kb_ids), config.kb_top_k, config.kb_score_threshold,
+             json.dumps(config.connector_ids), config.workflow_id, json.dumps(config.kb_ids), config.kb_top_k, config.kb_score_threshold,
              1 if config.memory_enabled else 0, config.short_term_turns, config.long_term_summary_interval,
              1 if config.user_profile_enabled else 0, config.max_rounds, config.max_tokens_per_round,
              json.dumps(config.stop_sequences), json.dumps(config.sub_agents), config.collaboration_mode,
@@ -1048,7 +1106,7 @@ class AgentManager:
         conn.execute("""UPDATE agents SET
             name=?, description=?, icon=?, category=?, system_prompt=?, model_preference=?,
             max_context=?, temperature=?, top_p=?, builtin_tools=?, skill_ids=?, mcp_ids=?,
-            connector_ids=?, kb_ids=?, kb_top_k=?, kb_score_threshold=?,
+            connector_ids=?, workflow_id=?, kb_ids=?, kb_top_k=?, kb_score_threshold=?,
             memory_enabled=?, short_term_turns=?, long_term_summary_interval=?, user_profile_enabled=?,
             max_rounds=?, max_tokens_per_round=?, stop_sequences=?, sub_agents=?, collaboration_mode=?,
             prompt_templates=?, response_format=?, enable_reasoning=?, auto_approve_tools=?,
@@ -1057,7 +1115,7 @@ class AgentManager:
             (config.name, config.description, config.icon, config.category, config.system_prompt,
              config.model_preference, config.max_context, config.temperature, config.top_p,
              json.dumps(config.builtin_tools), json.dumps(config.skill_ids), json.dumps(config.mcp_ids),
-             json.dumps(config.connector_ids), json.dumps(config.kb_ids), config.kb_top_k, config.kb_score_threshold,
+             json.dumps(config.connector_ids), config.workflow_id, json.dumps(config.kb_ids), config.kb_top_k, config.kb_score_threshold,
              1 if config.memory_enabled else 0, config.short_term_turns, config.long_term_summary_interval,
              1 if config.user_profile_enabled else 0, config.max_rounds, config.max_tokens_per_round,
              json.dumps(config.stop_sequences), json.dumps(config.sub_agents), config.collaboration_mode,

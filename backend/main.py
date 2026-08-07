@@ -1575,6 +1575,7 @@ class AgentBody(BaseModel):
     skill_ids: list = []
     mcp_ids: list = []
     connector_ids: list = []
+    workflow_id: str = ""
     kb_ids: list = []
     kb_top_k: int = 5
     kb_score_threshold: float = 0.5

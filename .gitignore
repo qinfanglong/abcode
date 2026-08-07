@@ -22,7 +22,7 @@ macapp/build/
 
 # Windows 构建产物
 dist/
-build/
+build/ABcode/
 
 # 操作系统
 .DS_Store
@@ -33,7 +33,7 @@ _wftest*.py
 
 # 打包虚拟环境与中间产物
 test_venv/
-build/
+build/ABcode/
 .pytest_cache/
 
 # Nuitka 构建产物

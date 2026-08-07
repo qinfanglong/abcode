@@ -100,10 +100,15 @@ jobs:
           chmod +x AppDir/AppRun
           
           # 下载 appimagetool
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage || true
+          if [ ! -f appimagetool-x86_64.AppImage ]; then
+            # 备选下载地址（GitHub 直连有时超时）
+            wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage || true
+          fi
           chmod +x appimagetool-x86_64.AppImage
           
-          # 生成 AppImage
+          # 生成 AppImage（GitHub Actions runner 无 FUSE，需 extract-and-run）
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir ABcode-linux-${VERSION#v}.AppImage || \
           ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir ABcode-linux-${VERSION#v}.AppImage
       - name: 创建源码包
         run: |
