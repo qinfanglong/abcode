@@ -117,11 +117,19 @@ jobs:
           [ -s appimagetool.AppImage ] || { echo "::error title=appimagetool::下载失败或文件为空"; exit 1; }
 
           # 生成 AppImage（GitHub Actions runner 无 FUSE，需 extract-and-run；失败再回退直接运行）
-          if ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run AppDir "ABcode-linux-${VERSION#v}.AppImage"; then
+          set +e
+          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run AppDir "ABcode-linux-${VERSION#v}.AppImage" 2>appimg_err.txt
+          rc1=$?
+          if [ $rc1 -eq 0 ]; then
             echo "extract-and-run 生成成功"
           else
-            echo "extract-and-run 失败，回退直接运行..."
-            ARCH=x86_64 ./appimagetool.AppImage AppDir "ABcode-linux-${VERSION#v}.AppImage"
+            echo "extract-and-run 失败(rc=$rc1)，回退直接运行..."
+            ARCH=x86_64 ./appimagetool.AppImage AppDir "ABcode-linux-${VERSION#v}.AppImage" 2>>appimg_err.txt
+          fi
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "::error title=AppImage-rc$rc::$(tail -c 700 appimg_err.txt | tr '\n' ' ')"
+            exit 1
           fi
           ls -lh ABcode-linux-*.AppImage
       - name: 创建源码包
@@ -199,12 +207,13 @@ jobs:
             $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
           }
           Write-Host "makensis: $nsisPath"
-          # 输出到文件，失败时把末尾诊断写入 ::error:: annotation
-          & $nsisPath "-DVERSION=$version" build/installer.nsi *>&1 | Tee-Object -FilePath makensis.log
+          # 完整捕获 makensis 输出；失败时把末尾诊断写入 ::error:: annotation（可匿名从 run 页/API 读取）
+          $output = & $nsisPath "-DVERSION=$version" build/installer.nsi 2>&1
           $code = $LASTEXITCODE
+          Write-Host ($output -join "`n")
           if ($code -ne 0) {
-            $tail = (Get-Content makensis.log -ErrorAction SilentlyContinue | Select-Object -Last 30) -join " | "
-            Write-Host "::error title=makensis exit=$code::$tail"
+            $tail = ($output | Select-Object -Last 20) -join " || "
+            Write-Host "::error title=makensis-exit$code::$tail"
             exit 1
           }
           
