@@ -1,21 +1,41 @@
-MIT License
+ABcode 有限开源许可证（Limited Open Source License）
+版本 1.0 — 2026-08-07
+版权所有（C）2026 ABcode 作者。保留所有权利。
 
-Copyright (c) 2026 ABcode contributors
+一、定义
+「本软件」指本仓库内以任何形式提供的源代码、资源文件、文档与构建脚本，
+包括但不限于 backend/、frontend/、docs/ 等目录下的全部内容。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+二、授予的权限（允许）
+1. 学习与研究：任何人可以查看、阅读、学习本软件源代码，用于学习、教学、
+   研究、技术交流等非商业目的。
+2. 个人使用：个人可以下载、安装并在非商业场景下运行本软件。
+3. 修改与实验：可以复制、修改源代码用于个人学习与实验，但修改后的版本
+   不得用于商业用途，且修改版本仍受本许可证约束。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+三、限制（禁止）
+1. 禁止商用：未经作者书面许可，任何个人或组织不得将本软件、其修改版本
+   或衍生作品用于任何商业目的，包括但不限于：销售、出租、提供付费服务
+   （SaaS/PaaS/托管服务）、在商业产品中集成、用于商业咨询项目等。
+2. 禁止闭源再分发：对本软件或修改版本的再分发，必须附带本许可证全文，
+   并保持源代码公开；不得以二进制或混淆形式单独分发。
+3. 禁止署名抹除：再分发时必须保留原始版权声明与本许可证，不得删除或
+   修改作者署名。
+4. 禁止商标使用：不得使用本软件名称「ABcode」及其标识注册或推广其他
+   产品或服务。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+四、免责声明
+本软件按「原样」提供，不附带任何明示或默示的担保，包括但不限于适销性、
+特定用途适用性与不侵权保证。在任何情况下，作者均不对因使用本软件而产生
+的任何索赔、损害或其他责任负责。
+
+五、授权例外
+如需将本软件用于本许可证禁止的场景（如商业授权、定制开发、技术咨询），
+请与作者联系获取商业授权。
+
+六、许可证终止
+违反本许可证任何条款者，其在本许可证下获得的权限自动终止；终止后须停止
+一切使用、复制与分发行为。
+
+七、适用法律
+本许可证的解释与执行适用中华人民共和国法律。
