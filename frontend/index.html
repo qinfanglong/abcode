@@ -311,6 +311,25 @@
 </div>
 
 <!-- 专家套件弹窗 -->
+<!-- 智能体测试弹窗 -->
+<div id="agent-test-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:560px; max-width:92vw;">
+    <div class="modal-header">
+      <h2>▶ 运行测试</h2>
+      <button class="modal-close" onclick="closeAgentTestModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="agent-test-model-info" style="font-size:12px; color:var(--text-secondary); background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin-bottom:12px;"></div>
+      <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">测试任务</label>
+      <textarea id="agent-test-input" rows="5" style="width:100%; margin-top:6px; box-sizing:border-box;" class="ncf-input" placeholder="输入要测试的任务..."></textarea>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="closeAgentTestModal()">取消</button>
+      <button class="btn-save" onclick="confirmAgentTest()">▶ 开始测试</button>
+    </div>
+  </div>
+</div>
+
 <div id="expert-modal" class="modal" style="display:none">
   <div class="modal-content" style="width:800px">
     <div class="modal-header">
@@ -399,8 +418,9 @@
           <!-- 中间画布 -->
           <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative;">
             <div id="wf-canvas-container" style="flex:1; position:relative; overflow:auto; background:var(--chat-bg);">
-              <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:4000px; height:4000px; pointer-events:none;"></svg>
-              <div id="wf-canvas" style="position:relative; width:4000px; height:4000px;"></div>
+              <div id="wf-canvas" style="position:relative; width:4000px; height:4000px;">
+                <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:4000px; height:4000px; pointer-events:none; z-index:2;"></svg>
+              </div>
             </div>
             <!-- 连线选中浮动条 -->
             <div id="wf-edge-toolbar" style="display:none; position:absolute; bottom:16px; left:50%; transform:translateX(-50%); background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:6px 14px; display:none; align-items:center; gap:10px; box-shadow:0 4px 16px rgba(0,0,0,0.12); z-index:20;">
@@ -1088,6 +1108,6 @@
 <!-- 消息内容渲染器（Markdown 轻量渲染，本地化无外网依赖） -->
 <script src="marked.min.js"></script>
 <script src="highlight.min.js"></script>
-<script src="app.js?v=20260807c"></script>
+<script src="app.js?v=20260807e"></script>
 </body>
 </html>

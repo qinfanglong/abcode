@@ -480,7 +480,8 @@ function agentFormTemplate(a) {
     networkProviders.forEach(p => {
       (p.models || []).forEach(m => {
         const selected = a.model_preference === m ? 'selected' : '';
-        modelOptions += `<option value="${m}" ${selected}>${m} (${p.name})</option>`;
+        const needKey = !/free/i.test(m) ? ' 🔑' : '';
+        modelOptions += `<option value="${m}" ${selected}>${m}${needKey} (${p.name})</option>`;
       });
     });
     modelOptions += '</optgroup>';
@@ -580,9 +581,50 @@ async function deleteAgent(aid) {
   }
 }
 
+let _agentTestAid = null;
+
 async function runAgentTest(aid) {
-  const text = prompt("输入要测试的任务：", "你好，请介绍一下你自己");
-  if (text === null) return;
+  const a = await api(`/api/agents/${aid}`);
+  _agentTestAid = aid;
+  const info = $("#agent-test-model-info");
+  const model = a.model_preference || "";
+  if (model) {
+    const p = (state.providers || []).find(x => (x.models || []).includes(model));
+    if (p) {
+      const tag = isLocalProvider(p) ? "🏠 本地模型" : "☁️ 公网模型";
+      let warn = "";
+      if (!isLocalProvider(p) && !p.api_key) {
+        if (/free/i.test(model)) {
+          warn = `<div style="color:#059669; margin-top:6px;">✅ 免费模型，无需 API Key，可直接测试。</div>`;
+        } else {
+          warn = `<div style="color:#d97706; margin-top:6px;">⚠️ 该模型需要 API Key（当前供应商未配置），测试将失败（HTTP 401）。请在「设置 → 模型供应商」中为 ${esc(p.name)} 补充 Key。</div>`;
+        }
+      }
+      info.innerHTML = `智能体 <b>${esc(a.name)}</b> · 模型：<b>${esc(model)}</b>（${tag} · ${esc(p.name)}）${warn}`;
+    } else {
+      info.innerHTML = `智能体 <b>${esc(a.name)}</b> · 模型偏好：<b>${esc(model)}</b>（未匹配到供应商，将回退自动选择）`;
+    }
+  } else {
+    info.innerHTML = `智能体 <b>${esc(a.name)}</b> · 模型：<b>自动选择</b>`;
+  }
+  const input = $("#agent-test-input");
+  input.value = "你好，请介绍一下你自己";
+  openModal("agent-test-modal");
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeAgentTestModal() {
+  closeModal("agent-test-modal");
+  _agentTestAid = null;
+}
+
+async function confirmAgentTest() {
+  const aid = _agentTestAid;
+  if (!aid) return;
+  const text = $("#agent-test-input").value.trim();
+  if (!text) { alert("请输入测试任务"); return; }
+  closeModal("agent-test-modal");
+  _agentTestAid = null;
   const panel = $("#agent-detail-panel");
   panel.innerHTML = `<div style="text-align:center; margin-top:60px; color:var(--text-secondary);"><div style="font-size:36px;">⏳</div><p>智能体运行中...</p></div>`;
   try {
@@ -3318,6 +3360,24 @@ function renderEdges() {
     svg.appendChild(hitPath);
     
     svg.appendChild(path);
+    
+    // 端点手柄：可拖动重连
+    const handleR = idx === selectedEdgeIdx ? 8 : 6;
+    const mkHandle = (hx, hy, kind) => {
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", hx);
+      c.setAttribute("cy", hy);
+      c.setAttribute("r", handleR);
+      c.setAttribute("fill", idx === selectedEdgeIdx ? "#ef4444" : "var(--card-bg)");
+      c.setAttribute("stroke", idx === selectedEdgeIdx ? "#ef4444" : "var(--primary)");
+      c.setAttribute("stroke-width", "2");
+      c.style.cursor = "crosshair";
+      c.style.pointerEvents = "all";
+      c.addEventListener("mousedown", (ev) => startEdgeDrag(ev, idx, kind));
+      return c;
+    };
+    svg.appendChild(mkHandle(x1, y1, "source"));
+    svg.appendChild(mkHandle(x2, y2, "target"));
   });
 }
 
@@ -3336,6 +3396,77 @@ function deleteSelectedEdge() {
     const tb = $("#wf-edge-toolbar");
     if (tb) tb.style.display = "none";
   }
+}
+
+// 拖动连线端点重连
+let wfEdgeDrag = null; // { idx, kind: "source"|"target" }
+
+function startEdgeDrag(e, idx, kind) {
+  e.stopPropagation();
+  e.preventDefault();
+  const edge = currentWorkflow && currentWorkflow.edges[idx];
+  if (!edge) return;
+  wfEdgeDrag = { idx, kind };
+  selectedEdgeIdx = idx;
+  
+  const svg = $("#wf-canvas-edges");
+  const container = $("#wf-canvas-container");
+  const cRect = container.getBoundingClientRect();
+  
+  const tmpLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  tmpLine.setAttribute("stroke", "var(--primary)");
+  tmpLine.setAttribute("stroke-width", "2");
+  tmpLine.setAttribute("stroke-dasharray", "6,3");
+  tmpLine.style.pointerEvents = "none";
+  svg.appendChild(tmpLine);
+  
+  const getEndPos = () => {
+    const sourceNode = currentWorkflow.nodes.find(n => n.id === edge.source);
+    const targetNode = currentWorkflow.nodes.find(n => n.id === edge.target);
+    return {
+      sx: sourceNode.x + 180, sy: sourceNode.y + 28,
+      tx: targetNode.x, ty: targetNode.y + 28
+    };
+  };
+  
+  const onMove = (ev) => {
+    const cx = ev.clientX - cRect.left + container.scrollLeft;
+    const cy = ev.clientY - cRect.top + container.scrollTop;
+    const p = getEndPos();
+    if (kind === "source") {
+      tmpLine.setAttribute("x1", cx); tmpLine.setAttribute("y1", cy);
+      tmpLine.setAttribute("x2", p.tx); tmpLine.setAttribute("y2", p.ty);
+    } else {
+      tmpLine.setAttribute("x1", p.sx); tmpLine.setAttribute("y1", p.sy);
+      tmpLine.setAttribute("x2", cx); tmpLine.setAttribute("y2", cy);
+    }
+  };
+  
+  const onUp = (ev) => {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    if (tmpLine && tmpLine.parentNode) tmpLine.remove();
+    const edgeNow = currentWorkflow.edges[idx];
+    if (edgeNow) {
+      // elementsFromPoint：穿透手柄/连线找端口
+      const els = document.elementsFromPoint(ev.clientX, ev.clientY);
+      const port = els.find(el => el.classList && (el.classList.contains("wf-port-in") || el.classList.contains("wf-port-out")));
+      if (port) {
+        const pid = port.dataset.id;
+        if (kind === "source" && port.classList.contains("wf-port-out") && pid !== edgeNow.target) {
+          edgeNow.source = pid;
+          renderEdges();
+        } else if (kind === "target" && port.classList.contains("wf-port-in") && pid !== edgeNow.source) {
+          edgeNow.target = pid;
+          renderEdges();
+        }
+      }
+    }
+    wfEdgeDrag = null;
+  };
+  
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
 }
 
 // 获取节点图标
@@ -4380,6 +4511,8 @@ function renderWfTestFileList() {
 }
 
 function appendWfTestMsg(role, content, nodeResults) {
+  const msgsEl = $("#wf-test-messages");
+  if (!msgsEl) return;
   const isUser = role === "user";
   const avatar = isUser ? "U" : "A";
   let nodeHtml = "";
@@ -4392,6 +4525,9 @@ function appendWfTestMsg(role, content, nodeResults) {
         return `<div class="wf-node-status ${cls}">${si} ${ic} ${esc(nr.label || nr.node_id)} ${nr.duration_ms ? nr.duration_ms + 'ms' : ''}</div>`;
       }).join('') + '</div>';
   }
+  msgsEl.style.display = "block";
+  const emptyEl = $("#wf-test-empty");
+  if (emptyEl) emptyEl.style.display = "none";
   const html = `<div class="wf-msg ${role}">
     <div class="wf-msg-avatar">${avatar}</div>
     <div class="wf-msg-bubble">${content}${nodeHtml}</div>

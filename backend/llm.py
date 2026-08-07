@@ -27,6 +27,11 @@ def _openai_chat(provider, model, messages, stream=True, timeout=180, tools=None
         with client.stream("POST", url, json=payload, headers=headers) as resp:
             if resp.status_code != 200:
                 body = resp.read().decode("utf-8", "ignore")[:500]
+                if resp.status_code in (401, 403):
+                    raise ModelError(
+                        f"认证失败（HTTP {resp.status_code}）：供应商「{provider.get('name','')}」的 API Key 无效或未配置，"
+                        f"请到「设置 → 模型供应商」检查/补充 Key。模型: {model}。详情: {body}"
+                    )
                 raise ModelError(f"HTTP {resp.status_code}: {body}")
             if not stream:
                 data = resp.json()
