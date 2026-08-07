@@ -75,7 +75,10 @@ async function init() {
     updateProviderSelect();
     const p = getProvider(state.currentProviderId);
     let m = savedModel && p && (p.models || []).includes(savedModel) ? savedModel : "";
-    if (!m && p && p.models.length) m = p.models[0];
+    if (!m && p && p.models.length) {
+      // 默认优先免费模型（模型名含 free / flash / mini / lite），避免落在付费模型上
+      m = p.models.find(x => /free/i.test(x)) || p.models.find(x => /flash|mini|lite|tiny|small/i.test(x)) || p.models[0];
+    }
     if (!m && p && p.default_model) m = p.default_model;
     state.currentModel = m;
     updateModelSelect();
@@ -224,7 +227,6 @@ function useSuggestion(text) {
 }
 
 // ===== 团队协作 =====
-let currentExpertId = null;
 
 async function loadTeamMembers() {
   const members = await api("/api/team/members");
@@ -310,46 +312,6 @@ async function loadSharedConversations() {
   `).join('');
 }
 
-// ===== 专家套件 =====
-async function loadExperts(category = null) {
-  const url = category && category !== 'all' ? `/api/experts?category=${category}` : "/api/experts";
-  const experts = await api(url);
-  const grid = $("#expert-grid");
-  grid.innerHTML = experts.map(e => `
-    <div class="expert-card" onclick="showExpertDetail('${e.id}')">
-      <span class="expert-icon">${e.icon}</span>
-      <div class="expert-name">${e.name}</div>
-      <div class="expert-desc">${e.description}</div>
-    </div>
-  `).join('');
-}
-
-async function showExpertDetail(eid) {
-  const e = await api(`/api/experts/${eid}`);
-  currentExpertId = eid;
-  $("#expert-detail-icon").textContent = e.icon;
-  $("#expert-detail-name").textContent = e.name;
-  $("#expert-detail-desc").textContent = e.description;
-  $("#expert-detail-prompt").value = e.system_prompt;
-  $("#expert-detail-tools").innerHTML = (e.tools || []).map(t =>
-    `<span class="expert-tool-tag">${t}</span>`
-  ).join('') || '<span class="expert-tool-tag">无</span>';
-  $("#expert-detail-model").textContent = e.model_preference || '自动选择';
-  $("#expert-detail").style.display = "block";
-}
-
-async function useCurrentExpert() {
-  if (!currentExpertId) return;
-  const r = await api(`/api/experts/${currentExpertId}/apply`, { 
-    method: "POST",
-    body: { conv_id: state.currentConvId }
-  });
-  if (r.ok) {
-    alert(`已应用专家: ${r.expert.name}\n\n系统提示词已更新，可直接开始对话。`);
-    closeModal("expert-modal");
-  }
-}
-
 // ===== 智能体 =====
 let currentAgentId = null;
 let agentEditing = null;
@@ -358,11 +320,22 @@ const agentCats = [
   ["product", "产品"], ["writing", "写作"], ["security", "安全"], ["language", "语言"]
 ];
 
-async function loadAgents(category = "all") {
-  const url = category && category !== 'all' ? `/api/agents?category=${category}` : "/api/agents";
-  const agents = await api(url);
-  const list = $("#agent-list");
-  list.innerHTML = agents.map(a => `
+let _agentSource = 'created';
+let _agentPage = 1;
+let _agentTotalPages = 1;
+const AGENT_PAGE_SIZE = 20;
+
+async function loadAgents(source, page) {
+  if (source === 'builtin' || source === 'created') _agentSource = source;
+  if (page) _agentPage = page;
+  const all = await api("/api/agents");
+  const list = all.filter(a => _agentSource === 'builtin' ? a.is_builtin : !a.is_builtin);
+  _agentTotalPages = Math.max(1, Math.ceil(list.length / AGENT_PAGE_SIZE));
+  if (_agentPage > _agentTotalPages) _agentPage = _agentTotalPages;
+  const start = (_agentPage - 1) * AGENT_PAGE_SIZE;
+  const pageItems = list.slice(start, start + AGENT_PAGE_SIZE);
+  const el = $("#agent-list");
+  el.innerHTML = pageItems.map(a => `
     <div class="agent-list-item ${currentAgentId === a.id ? 'active' : ''}" data-aid="${a.id}" onclick="showAgentDetail('${a.id}')">
       <span class="agent-list-icon">${a.icon || '🤖'}</span>
       <div style="flex:1; min-width:0;">
@@ -372,6 +345,18 @@ async function loadAgents(category = "all") {
       ${a.is_builtin ? '<span style="font-size:10px; background:var(--input-bg); padding:2px 6px; border-radius:4px; color:var(--text-muted);">内置</span>' : ''}
     </div>
   `).join('') || '<div style="padding:20px; text-align:center; color:var(--text-muted);">暂无智能体</div>';
+  // 分页条
+  const pg = $("#agent-pagination");
+  if (pg) {
+    pg.style.display = _agentTotalPages > 1 ? 'flex' : 'none';
+    const info = $("#agent-page-info");
+    if (info) info.textContent = `${_agentPage}/${_agentTotalPages}`;
+  }
+}
+
+function agentPage(delta) {
+  const next = Math.min(Math.max(1, _agentPage + delta), _agentTotalPages);
+  if (next !== _agentPage) loadAgents(null, next);
 }
 
 async function showAgentDetail(aid) {
@@ -396,7 +381,9 @@ async function showAgentDetail(aid) {
       </div>
       <div style="display:flex; gap:6px;">
         <button class="btn-save" onclick="openAgentChat('${a.id}')">💬 对话</button>
-        <button class="btn-test" onclick="openAgentForm('${a.id}')" ${a.is_builtin ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>✏️ 编辑</button>
+        ${a.is_builtin
+          ? `<button class="btn-test" onclick="openAgentFormCopy('${a.id}')">📋 复制</button>`
+          : `<button class="btn-test" onclick="openAgentForm('${a.id}')">✏️ 编辑</button>`}
       </div>
     </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -457,15 +444,18 @@ async function openAgentChat(aid) {
   scrollBottom();
   // 保存智能体绑定到会话
   localStorage.setItem("abcode-conv-agent", data.id + "|" + aid);
+  window._currentAgentCfg = a;
 }
 
 function agentFormTemplate(a, meta) {
   a = a || {};
   meta = meta || { skills: [], kbs: [], mcps: [], wfs: [] };
   const catOptions = agentCats.map(([v, label]) => `<option value="${v}" ${a.category === v ? 'selected' : ''}>${label}</option>`).join('');
+  const defaultTools = ["web_search", "file_read"];
+  const initTools = a.id ? (a.builtin_tools || []) : (a.builtin_tools && a.builtin_tools.length ? a.builtin_tools : defaultTools);
   const toolChecks = (window._agentToolNames || ["shell","file_read","file_write","list_files","web_search","fetch_url"]).map(t =>
     `<label style="display:inline-flex; align-items:center; gap:4px; margin:4px 8px 4px 0; font-size:12px;">
-      <input type="checkbox" class="agt-tool-cb" value="${t}" ${(a.builtin_tools || []).includes(t) ? 'checked' : ''}> ${t}
+      <input type="checkbox" class="agt-tool-cb" value="${t}" ${initTools.includes(t) ? 'checked' : ''}> ${t}
     </label>`).join('');
   
   // 技能多选
@@ -529,6 +519,13 @@ function agentFormTemplate(a, meta) {
     <div style="margin-top:10px;"><label class="agent-info-label">内置工具</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${toolChecks}</div></div>
     <div style="margin-top:10px;"><label class="agent-info-label">🧩 技能（可多选）</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${skillChecks}</div></div>
     <div style="margin-top:10px;"><label class="agent-info-label">📚 知识库（可多选）</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${kbChecks}</div></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:10px;">
+      <div><label class="agent-info-label">知识库检索条数</label><input id="agt-kb-topk" class="ncf-input" type="number" min="1" max="20" value="${a.kb_top_k ?? 5}"></div>
+      <div><label class="agent-info-label">相关度阈值</label><input id="agt-kb-threshold" class="ncf-input" type="number" step="0.05" min="0" max="1" value="${a.kb_score_threshold ?? 0.5}"></div>
+      <div style="display:flex; align-items:flex-end; padding-bottom:6px;">
+        <label style="display:flex; align-items:center; gap:4px; font-size:12px;"><input type="checkbox" id="agt-show-sources" ${a.show_sources !== false ? 'checked' : ''}> 回答显示来源</label>
+      </div>
+    </div>
     <div style="margin-top:10px;"><label class="agent-info-label">🔌 MCP 服务器（可多选）</label><div style="border:1px solid var(--border); border-radius:8px; padding:8px; margin-top:4px;">${mcpChecks}</div></div>
     <div style="margin-top:10px;"><label class="agent-info-label">⚙️ 绑定工作流</label><select id="agt-workflow" class="ncf-input">${wfOptions}</select></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
@@ -542,6 +539,11 @@ function agentFormTemplate(a, meta) {
     <div style="margin-top:12px; display:flex; gap:10px;">
       <label style="display:flex; align-items:center; gap:4px; font-size:12px;"><input type="checkbox" id="agt-reasoning" ${a.enable_reasoning ? 'checked' : ''}> 显式推理</label>
       <label style="display:flex; align-items:center; gap:4px; font-size:12px;"><input type="checkbox" id="agt-memory" ${a.memory_enabled !== false ? 'checked' : ''}> 记忆</label>
+      <label style="display:flex; align-items:center; gap:4px; font-size:12px;"><input type="checkbox" id="agt-user-profile" ${a.user_profile_enabled !== false ? 'checked' : ''}> 用户画像</label>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+      <div><label class="agent-info-label">短期记忆轮次</label><input id="agt-mem-turns" class="ncf-input" type="number" min="0" max="100" value="${a.short_term_turns ?? 20}"></div>
+      <div><label class="agent-info-label">长期摘要间隔（轮）</label><input id="agt-mem-summary" class="ncf-input" type="number" min="0" max="100" value="${a.long_term_summary_interval ?? 10}"></div>
     </div>
     <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
       <button class="btn-test" onclick="showAgentDetail('${a.id || ''}')">取消</button>
@@ -586,6 +588,17 @@ function openAgentForm(aid) {
   }
 }
 
+// 复制智能体（内置智能体不可编辑，复制为可编辑副本）
+async function openAgentFormCopy(aid) {
+  const a = await api(`/api/agents/${aid}`);
+  const copy = Object.assign({}, a);
+  delete copy.id; delete copy.is_builtin; delete copy.created_at; delete copy.updated_at; delete copy.version; delete copy.enabled;
+  copy.name = (a.name || "智能体") + "（副本）";
+  agentEditing = copy;
+  const meta = await ensureAgentBindMeta();
+  $("#agent-detail-panel").innerHTML = agentFormTemplate(copy, meta);
+}
+
 async function saveAgent() {
   const id = $("#agt-id").value;
   const body = {
@@ -600,6 +613,12 @@ async function saveAgent() {
     kb_ids: Array.from($$("#agent-detail-panel .agt-kb-cb:checked")).map(cb => cb.value),
     mcp_ids: Array.from($$("#agent-detail-panel .agt-mcp-cb:checked")).map(cb => cb.value),
     workflow_id: ($("#agt-workflow") || {}).value || "",
+    kb_top_k: parseInt($("#agt-kb-topk") ? $("#agt-kb-topk").value : 5) || 5,
+    kb_score_threshold: parseFloat($("#agt-kb-threshold") ? $("#agt-kb-threshold").value : 0.5) || 0.5,
+    show_sources: $("#agt-show-sources") ? $("#agt-show-sources").checked : true,
+    short_term_turns: parseInt($("#agt-mem-turns") ? $("#agt-mem-turns").value : 20) || 20,
+    long_term_summary_interval: parseInt($("#agt-mem-summary") ? $("#agt-mem-summary").value : 10) || 10,
+    user_profile_enabled: $("#agt-user-profile") ? $("#agt-user-profile").checked : true,
     model_preference: $("#agt-model").value.trim(),
     temperature: parseFloat($("#agt-temp").value) || 0.7,
     max_context: parseInt($("#agt-ctx").value) || 128000,
@@ -718,12 +737,14 @@ async function viewAgentMemory(aid) {
   } catch (e) {}
 }
 
-// 智能体分类页签
+// 智能体来源页签（内置/创建）
 document.addEventListener("click", (e) => {
-  const tab = e.target.closest(".agent-cat-tab");
+  const tab = e.target.closest(".agent-source-tab");
   if (!tab) return;
-  $$(".agent-cat-tab").forEach(t => t.classList.toggle("active", t === tab));
-  loadAgents(tab.dataset.cat);
+  $$(".agent-source-tab").forEach(t => t.classList.toggle("active", t === tab));
+  loadAgents(tab.dataset.source, 1);
+  const createBtn = $("#agent-create-btn");
+  if (createBtn) createBtn.style.display = tab.dataset.source === 'created' ? '' : 'none';
 });
 
 // 记录可用内置工具名（供表单勾选）
@@ -1045,9 +1066,12 @@ function updateModelSelect() {
     opt.textContent = m;
     sel.appendChild(opt);
   });
-  if (models.includes(state.currentModel)) sel.value = state.currentModel;
-  else if (p.default_model) sel.value = p.default_model;
-  state.currentModel = sel.value;
+  let picked = null;
+  if (models.includes(state.currentModel)) picked = state.currentModel;
+  else if (p.default_model && models.includes(p.default_model)) picked = p.default_model;
+  if (!picked) picked = models.find(m => /free/i.test(m)) || models[0];
+  sel.value = picked;
+  state.currentModel = picked;
   syncInputModelSelect();
 }
 
@@ -1066,8 +1090,12 @@ function syncInputModelSelect() {
     opt.textContent = m;
     sel.appendChild(opt);
   });
-  if (models.includes(state.currentModel)) sel.value = state.currentModel;
-  else if (p.default_model) sel.value = p.default_model;
+  let picked = null;
+  if (models.includes(state.currentModel)) picked = state.currentModel;
+  else if (p.default_model && models.includes(p.default_model)) picked = p.default_model;
+  if (!picked) picked = models.find(m => /free/i.test(m)) || models[0];
+  sel.value = picked;
+  state.currentModel = picked;
 }
 
 function renderProviderList() {
@@ -1136,7 +1164,7 @@ async function saveProvider() {
     updateProviderSelect();
   }
   const p = getProvider(state.currentProviderId);
-  if (p && p.models.length && !state.currentModel) state.currentModel = p.models[0];
+  if (p && p.models.length && !state.currentModel) state.currentModel = p.models.find(x => /free/i.test(x)) || p.models[0];
   updateModelSelect();
 }
 
@@ -2469,6 +2497,9 @@ async function loadChannels() {
         </div>
         <div class="ch-right">
           <span class="ch-status">已启用</span>
+          <button class="ch-btn" onclick="openChannelConfig('${ch.id}')">⚙ 配置</button>
+          <button class="ch-btn" onclick="openChannelQr('${ch.id}')">📱 扫码</button>
+          <button class="ch-btn" onclick="openChannelMsgs('${ch.id}')">💬 消息</button>
           <button class="ch-btn" onclick="toggleChannel('${ch.id}', false)">停用</button>
           ${ch.builtin ? "" : `<button class="ch-btn danger" onclick="deleteChannel('${ch.id}')">删除</button>`}
         </div>`;
@@ -2487,6 +2518,8 @@ async function loadChannels() {
       el.innerHTML = `
         <span class="ch-grid-icon">${esc(ch.icon || "📡")}</span>
         <span class="ch-grid-name">${esc(ch.name)}</span>
+        <button class="ch-grid-btn" onclick="openChannelConfig('${ch.id}')">⚙ 配置</button>
+        <button class="ch-grid-btn" onclick="openChannelQr('${ch.id}')">📱 扫码</button>
         <button class="ch-grid-btn" onclick="toggleChannel('${ch.id}', true)">启用</button>`;
       disabledGrid.appendChild(el);
     });
@@ -2502,6 +2535,200 @@ async function deleteChannel(id) {
   if (!confirm("删除该频道？")) return;
   await api(`/api/channels/${id}`, { method: "DELETE" });
   loadChannels();
+}
+
+// ===== 频道配置参数 =====
+// 各渠道可配置参数（key -> 中文标签）
+const CHANNEL_FIELDS = {
+  wechat: [["app_id", "AppID"], ["app_secret", "AppSecret"], ["token", "Token"], ["aes_key", "AES Key"]],
+  wecom: [["corp_id", "企业ID"], ["agent_id", "应用 AgentId"], ["secret", "Secret"], ["token", "Token"], ["encoding_aes_key", "EncodingAESKey"]],
+  dingtalk: [["app_key", "AppKey"], ["app_secret", "AppSecret"], ["webhook_token", "Webhook Token"], ["sign_secret", "加签密钥"]],
+  feishu: [["app_id", "App ID"], ["app_secret", "App Secret"], ["verify_token", "Verification Token"], ["encrypt_key", "Encrypt Key"]],
+  telegram: [["bot_token", "Bot Token"]],
+  discord: [["bot_token", "Bot Token"]],
+  qq: [["bot_appid", "Bot AppID"], ["bot_token", "Bot Token"], ["bot_secret", "Bot Secret"]],
+  slack: [["bot_token", "Bot Token"], ["signing_secret", "Signing Secret"]],
+  matrix: [["homeserver", "Homeserver 地址"], ["access_token", "Access Token"]],
+  mqtt: [["broker_url", "Broker 地址"], ["username", "用户名"], ["password", "密码"], ["topic", "订阅主题"]],
+  onebot: [["ws_url", "WebSocket 地址"], ["access_token", "Access Token"]],
+  sip: [["server", "SIP 服务器"], ["username", "账号"], ["password", "密码"]],
+  voice: [["provider", "语音服务商"], ["app_key", "AppKey"], ["app_secret", "AppSecret"]],
+  default: [["webhook_url", "Webhook URL"], ["api_key", "API Key"], ["secret", "Secret"]]
+};
+
+let currentChannelConfig = null;
+
+async function openChannelConfig(cid) {
+  const channels = await api("/api/channels");
+  const ch = channels.find((c) => c.id === cid);
+  if (!ch) return;
+  currentChannelConfig = ch;
+  $("#chcfg-title").textContent = `⚙ ${ch.name} 配置`;
+  const fields = CHANNEL_FIELDS[ch.type] || CHANNEL_FIELDS.default;
+  const cfg = ch.config || {};
+  const rows = fields.map(([key, label]) => {
+    const val = (cfg[key] ?? "").toString().split('"').join("&quot;");
+    return `<div class="chcfg-row">
+      <label>${label}</label>
+      <input id="chcfg-${key}" type="text" value="${val}" placeholder="请输入 ${label}" autocomplete="off">
+    </div>`;
+  }).join("");
+  const prefix = (ch.bot_prefix || "").split('"').join("&quot;");
+  const desc = (ch.description || "").split('"').join("&quot;");
+  $("#chcfg-fields").innerHTML = rows + `
+    <div class="chcfg-row"><label>机器人前缀</label><input id="chcfg-bot_prefix" type="text" value="${prefix}" placeholder="如：@bot 或 /" autocomplete="off"></div>
+    <div class="chcfg-row"><label>描述</label><input id="chcfg-description" type="text" value="${desc}" autocomplete="off"></div>`;
+  $("#channel-config-modal").style.display = "flex";
+}
+
+function closeChannelConfig() {
+  $("#channel-config-modal").style.display = "none";
+  currentChannelConfig = null;
+}
+
+async function saveChannelConfig() {
+  if (!currentChannelConfig) return;
+  const ch = currentChannelConfig;
+  const fields = CHANNEL_FIELDS[ch.type] || CHANNEL_FIELDS.default;
+  const cfg = {};
+  fields.forEach(([key]) => {
+    const v = $(`#chcfg-${key}`)?.value?.trim() ?? "";
+    if (v) cfg[key] = v;
+  });
+  const body = { config: cfg };
+  const bp = $("#chcfg-bot_prefix")?.value?.trim() ?? "";
+  if (bp !== (ch.bot_prefix || "")) body.bot_prefix = bp;
+  await api(`/api/channels/${ch.id}/config`, { method: "POST", body });
+  closeChannelConfig();
+  loadChannels();
+  alert(`✅ 「${ch.name}」配置已保存`);
+}
+
+// ===== 频道扫码接入 =====
+const CHANNEL_HINT_FOR = {
+  wechat: "微信无官方个人 Bot 接口；若走通用通道，请以外部分发器把微信消息转换为 POST JSON {sender,text} 调用消息面板中的 Webhook 地址。",
+  dingtalk: "钉钉：扫码启用后，还需在「配置」中填写 AppKey/AppSecret，ABcode 即通过 Stream 长连接接收钉钉消息（免公网）。",
+  wecom: "企业微信：需在配置填写 corp_id / agent_id / secret，并外网回调接转到消息面板的 Webhook 地址。",
+  feishu: "飞书：需在配置填写 app_id / app_secret，并外网回调接转到消息面板的 Webhook 地址。",
+  default: "通用通道：确认接入后即可通过「消息」面板中的 Webhook 接口收发对话（POST JSON {sender, text}）。"
+};
+
+let currentMsgsChannelId = null;
+
+async function openChannelMsgs(cid) {
+  const channels = await api("/api/channels");
+  const ch = channels.find((c) => c.id === cid);
+  if (!ch) return;
+  currentMsgsChannelId = cid;
+  $("#chmsgs-title").textContent = `💬 ${ch.name} 消息`;
+  $("#chmsgs-webhook").textContent = `POST http://${location.host}/api/channels/${cid}/webhook`;
+  $("#channel-msgs-modal").style.display = "flex";
+  await loadChannelMsgs(cid);
+}
+
+async function loadChannelMsgs(cid) {
+  const list = await api(`/api/channels/${cid}/messages?limit=100`);
+  const box = $("#chmsgs-list");
+  if (!list || !list.length) {
+    box.innerHTML = '<p class="hint" style="text-align:center;padding:20px;">暂无消息。用下方输入框模拟一条频道对话，或向 Webhook 地址 POST 消息。</p>';
+    return;
+  }
+  box.innerHTML = list.map((m) => {
+    const t = new Date(m.created_at * 1000);
+    const time = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+    const who = m.role === "assistant" ? "🤖 ABcode" : `👤 ${esc(m.sender || "用户")}`;
+    const cls = m.role === "assistant" ? "chmsg-a" : "chmsg-u";
+    return `<div class="chmsg ${cls}"><div class="chmsg-meta">${who} <span style="color:var(--muted);font-size:11px;">${time}</span></div><div class="chmsg-body">${esc(m.content).replace(/\n/g, "<br>")}</div></div>`;
+  }).join("");
+}
+
+function closeChannelMsgs() {
+  $("#channel-msgs-modal").style.display = "none";
+  currentMsgsChannelId = null;
+}
+
+async function sendChannelTestMsg() {
+  if (!currentMsgsChannelId) return;
+  const text = $("#chmsgs-test-text").value.trim();
+  if (!text) { alert("请输入消息内容"); return; }
+  const sender = $("#chmsgs-test-sender").value.trim() || "测试用户";
+  await api(`/api/channels/${currentMsgsChannelId}/send`, {
+    method: "POST",
+    body: { sender, text }
+  });
+  $("#chmsgs-test-text").value = "";
+  await loadChannelMsgs(currentMsgsChannelId);
+}
+
+async function clearChannelMsgs() {
+  if (!currentMsgsChannelId) return;
+  if (!confirm("确认清空该频道的消息记录？")) return;
+  await api(`/api/channels/${currentMsgsChannelId}/messages`, { method: "DELETE" });
+  await loadChannelMsgs(currentMsgsChannelId);
+}
+
+let currentQrChannelId = null;
+let currentQrPollTimer = null;
+let currentQrGenerating = false;
+
+async function openChannelQr(cid) {
+  if (currentQrGenerating) return;  // 生成中禁止连点
+  currentQrGenerating = true;
+  const channels = await api("/api/channels");
+  const ch = channels.find((c) => c.id === cid);
+  if (!ch) { currentQrGenerating = false; return; }
+  currentQrChannelId = cid;
+  $("#chqr-title").textContent = `📱 ${ch.name} 扫码接入`;
+  $("#chqr-tip").textContent = "请用手机扫码，在手机上确认接入该频道";
+  $("#chqr-status").textContent = "";
+  const hint = CHANNEL_HINT_FOR[ch.type] || CHANNEL_HINT_FOR.default;
+  $("#chqr-webhook-hint").textContent = hint.replace("{cid}", cid).replace("{host}", location.host);
+  $("#chqr-qr").innerHTML = '<span class="hint" style="color:var(--muted)">生成中…</span>';
+  const refreshBtn = document.querySelector("#channel-qr-modal .ch-btn[onclick*='openChannelQr']");
+  if (refreshBtn) refreshBtn.disabled = true;
+  $("#channel-qr-modal").style.display = "flex";
+
+  const r = await api(`/api/channels/${cid}/qr`, { method: "POST" });
+  if (!r.ok) {
+    $("#chqr-qr").innerHTML = `<span class="hint" style="color:#dc2626">${esc(r.detail || "生成失败")}</span>`;
+    currentQrGenerating = false;
+    if (refreshBtn) refreshBtn.disabled = false;
+    return;
+  }
+  const img = new Image();
+  img.src = `/api/channels/${cid}/qr/png?code=${encodeURIComponent(r.code)}`;
+  img.width = 240;
+  img.height = 240;
+  img.style.borderRadius = "8px";
+  img.onload = () => { $("#chqr-qr").innerHTML = ""; $("#chqr-qr").appendChild(img); currentQrGenerating = false; if (refreshBtn) refreshBtn.disabled = false; };
+  img.onerror = () => { $("#chqr-qr").innerHTML = '<span class="hint" style="color:#dc2626">二维码生成失败</span>'; currentQrGenerating = false; if (refreshBtn) refreshBtn.disabled = false; };
+
+  if (currentQrPollTimer) clearInterval(currentQrPollTimer);
+  currentQrPollTimer = setInterval(async () => {
+    const s = await api(`/api/channels/${cid}/qr/status`);
+    if (!s) return;
+    if (s.status === "confirmed") {
+      clearInterval(currentQrPollTimer);
+      currentQrPollTimer = null;
+      $("#chqr-status").textContent = "✅ 已确认接入！";
+      $("#chqr-status").style.color = "#16a34a";
+      loadChannels();
+      setTimeout(() => closeChannelQr(), 1200);
+    } else if (s.status === "expired") {
+      clearInterval(currentQrPollTimer);
+      currentQrPollTimer = null;
+      $("#chqr-status").textContent = "⏰ 二维码已过期，请点「刷新二维码」";
+      $("#chqr-status").style.color = "#dc2626";
+    }
+  }, 2000);
+}
+
+function closeChannelQr() {
+  if (currentQrPollTimer) { clearInterval(currentQrPollTimer); currentQrPollTimer = null; }
+  currentQrGenerating = false;
+  const refreshBtn = document.querySelector("#channel-qr-modal .ch-btn[onclick*='openChannelQr']");
+  if (refreshBtn) refreshBtn.disabled = false;
+  $("#channel-qr-modal").style.display = "none";
 }
 
 // ===== 会话工具配置 =====
@@ -2992,6 +3219,17 @@ async function openWorkflowEditor(wfId) {
   renderWorkflowCanvas();
   initCanvasPan();
   
+  // 自动定位到节点区域中心，确保节点可见
+  requestAnimationFrame(() => {
+    const nodes = currentWorkflow.nodes || [];
+    if (nodes.length) {
+      const cx = nodes.reduce((s, n) => s + (n.x || 0), 0) / nodes.length;
+      const cy = nodes.reduce((s, n) => s + (n.y || 0), 0) / nodes.length;
+      const c = $("#wf-canvas-container");
+      if (c) c.scrollTo(Math.max(0, cx - c.clientWidth / 2 + 90), Math.max(0, cy - c.clientHeight / 2));
+    }
+  });
+  
   // 如果测试面板是打开的，刷新输入字段
   if (testPanelOpen) initTestPanel();
 }
@@ -3389,6 +3627,7 @@ function renderEdges() {
     path.setAttribute("stroke", idx === selectedEdgeIdx ? "#ef4444" : "var(--primary)");
     path.setAttribute("stroke-width", idx === selectedEdgeIdx ? "3" : "2");
     path.setAttribute("marker-end", "url(#arrowhead)");
+    path.setAttribute("class", "wf-edge-path");
     path.style.pointerEvents = "stroke";
     path.style.cursor = "pointer";
     path.setAttribute("stroke-linecap", "round");
@@ -5189,12 +5428,20 @@ async function doSend(text, attachFiles = null) {
           done = true;
         } else if (payload.done) {
           done = true;
-          // 显示回答来源（知识库引用）
+          // 显示回答来源（知识库引用 + 网页链接），受智能体 show_sources 开关控制
           const sources = payload.sources || [];
+          const agentCfg = window._currentAgentCfg || null;
+          const showSrc = agentCfg ? agentCfg.show_sources !== false : true;
           const b = holder.querySelector(".bubble");
-          if (sources.length > 0 && b) {
-            const srcHtml = `<div class="agent-sources">📚 回答来源：${sources.map(s =>
-              `<span class="source-tag" title="${esc(s.snippet || '')}">📄 ${esc(s.doc_name || '未知')}${s.score != null ? ` <i>${(s.score * 100).toFixed(0)}%</i>` : ''}</span>`).join(' ')}</div>`;
+          if (sources.length > 0 && b && showSrc) {
+            const srcHtml = `<div class="agent-sources">📚 回答来源：${sources.map(s => {
+              if (s.url) {
+                let host = s.url;
+                try { host = new URL(s.url).hostname.replace(/^www\./, ''); } catch(e) {}
+                return `<a class="source-tag" href="${esc(s.url)}" target="_blank" rel="noopener">🔗 ${esc(host)}</a>`;
+              }
+              return `<span class="source-tag" title="${esc(s.snippet || '')}">📄 ${esc(s.doc_name || '未知')}${s.score != null ? ` <i>${(s.score * 100).toFixed(0)}%</i>` : ''}</span>`;
+            }).join(' ')}</div>`;
             const wrap = document.createElement("div");
             wrap.innerHTML = srcHtml;
             b.appendChild(wrap.firstChild);
@@ -5386,10 +5633,6 @@ function bindEvents() {
     loadTeamActivity();
     loadSharedConversations();
   };
-  $("#expert-btn").onclick = () => {
-    openModal("expert-modal");
-    loadExperts();
-  };
   $("#agent-btn").onclick = () => {
     openModal("agent-modal");
     loadAgents("all");
@@ -5464,16 +5707,6 @@ function bindEvents() {
       if (tabName === "members") loadTeamMembers();
       else if (tabName === "shared") loadSharedConversations();
       else if (tabName === "activity") loadTeamActivity();
-    });
-  });
-
-  // 专家套件分类切换
-  $$(".expert-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      $$(".expert-tab").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      loadExperts(tab.dataset.category);
-      $("#expert-detail").style.display = "none";
     });
   });
 
@@ -5973,7 +6206,7 @@ function initSidebar() {
   // 社交栏导航：拖拽排序（HTML5 draggable）
   const footer = document.querySelector(".sidebar-footer");
   if (!footer) return;
-  const navIds = ["agent-btn", "team-btn", "expert-btn", "workflow-btn",
+  const navIds = ["agent-btn", "team-btn", "workflow-btn",
     "tools-btn", "kb-btn", "cron-btn", "channel-btn", "settings-btn"];
   const STORE = "abcode-nav-order";
   // 恢复已保存顺序

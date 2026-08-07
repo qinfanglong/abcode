@@ -5,3 +5,6 @@ pydantic>=2.0
 python-multipart==0.0.20
 requests>=2.28.0
 lxml>=4.9.0
+
+# 钉钉 Stream 频道（可选，未安装时钉钉频道仅提示缺少依赖）
+dingtalk-stream>=0.13.0

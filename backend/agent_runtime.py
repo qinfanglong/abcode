@@ -9,6 +9,7 @@ import json
 import time
 import uuid
 import os
+import re
 import threading
 import sqlite3
 from pathlib import Path
@@ -76,6 +77,7 @@ class AgentConfig:
     kb_ids: List[str] = field(default_factory=list)
     kb_top_k: int = 5
     kb_score_threshold: float = 0.5
+    show_sources: bool = True   # 回答是否显示来源
     
     # 记忆策略
     memory_enabled: bool = True
@@ -233,6 +235,11 @@ class MemoryManager:
             conn.execute("SELECT role FROM agent_memories LIMIT 1")
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE agent_memories ADD COLUMN role TEXT DEFAULT ''")
+        # 修复历史脏数据：role 为空时用 key 回填
+        try:
+            conn.execute("UPDATE agent_memories SET role = key WHERE role = '' AND key IN ('user', 'assistant', 'system', 'tool')")
+        except Exception:
+            pass
         conn.commit()
         conn.close()
     
@@ -241,10 +248,10 @@ class MemoryManager:
         self._ensure_tables()
         conn = self._get_conn()
         conn.execute("""INSERT INTO agent_memories 
-            (id, agent_id, session_id, user_id, type, key, content, metadata, embedding, importance, access_count, last_accessed, created_at, expires_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (id, agent_id, session_id, user_id, type, key, role, content, metadata, embedding, importance, access_count, last_accessed, created_at, expires_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (entry.id, entry.agent_id, entry.session_id, entry.user_id,
-             entry.type.value, entry.key, entry.content,
+             entry.type.value, entry.key, entry.key, entry.content,
              json.dumps(entry.metadata), json.dumps(entry.embedding),
              entry.importance, entry.access_count, entry.last_accessed,
              entry.created_at, entry.expires_at))
@@ -296,7 +303,7 @@ class MemoryManager:
         turns = turns or self.config.short_term_turns
         conn = self._get_conn()
         rows = conn.execute("""
-            SELECT role, content, created_at FROM agent_memories
+            SELECT role, key, content, created_at FROM agent_memories
             WHERE agent_id=? AND session_id=? AND type=?
             ORDER BY created_at DESC LIMIT ?
         """, (agent_id, session_id, MemoryType.SHORT_TERM.value, turns * 2)).fetchall()
@@ -304,7 +311,10 @@ class MemoryManager:
         # 转为 messages 格式（倒序取后正序）
         msgs = []
         for r in reversed(rows):
-            msgs.append({"role": r["role"], "content": r["content"]})
+            role = r["role"] or r["key"]
+            if role not in ("user", "assistant", "system", "tool"):
+                continue
+            msgs.append({"role": role, "content": r["content"]})
         return msgs
     
     def save_conversation_turn(self, session_id: str, agent_id: str, user_id: str,
@@ -588,6 +598,15 @@ class AgentRuntime:
         # 注入实时时间
         prompt += TIME_PROMPT_TPL.format(time=get_current_time_str())
         
+        # 工具使用纪律（防止模型陷入重复调用循环）
+        if self.config.builtin_tools or self.config.skill_ids or self.config.mcp_ids or self.config.connector_ids or self.config.workflow_id:
+            prompt += (
+                "\n\n工具使用纪律："
+                "1) 同一问题最多调用搜索/查询类工具 2 次，拿到结果后必须停止调用工具；"
+                "2) 工具结果已足够回答时，直接基于结果给出最终回答，不要再次调用工具；"
+                "3) 如果工具调用失败，尝试 1 次后改用已有信息回答或说明无法完成。"
+            )
+        
         # 推理模式
         if self.config.enable_reasoning:
             prompt += (
@@ -678,6 +697,7 @@ class AgentRuntime:
         try:
             tools = self.tools.build()
             provider, model = self._pick_provider_model()
+            text = ""
             
             for round_idx in range(self.config.max_rounds):
                 with self._lock:
@@ -737,6 +757,16 @@ class AgentRuntime:
                     
                     ok, result = self.tools.execute(name, args)
                     
+                    # 收集网页来源链接（web_search/search_engine/fetch_url 返回文本中的 URL）
+                    if ok and name in ("web_search", "search_engine", "fetch_url") and isinstance(result, str):
+                        found_urls = re.findall(r'https?://[^\s\)\]"\']+', result)
+                        web_src = list(getattr(self, "_web_sources", []))
+                        for u in found_urls[:10]:
+                            u = u.rstrip('.,;，。')
+                            if u and not any(x.get("url") == u for x in web_src):
+                                web_src.append({"type": "web", "url": u, "title": u})
+                        self._web_sources = web_src
+                    
                     result_text = result[:2000] if isinstance(result, str) else json.dumps(result, ensure_ascii=False)[:2000]
                     
                     with self._lock:
@@ -764,11 +794,17 @@ class AgentRuntime:
                 # 继续下一轮（user_input 置空，继续对话）
                 user_input = ""
             
-            # 达到最大轮数
+            # 达到最大轮数 - 软降级：有已生成内容则返回，避免"工具循环后一无所获"
             with self._lock:
-                self.state.status = AgentStatus.FAILED
-                self.state.last_error = "超过最大工具调用轮数"
-            yield {"type": "error", "error": "超过最大工具调用轮数"}
+                self.state.status = AgentStatus.COMPLETED
+            if text.strip():
+                yield {"type": "done", "content": text, "total_tokens": self.state.total_tokens,
+                       "sources": getattr(self, "_last_sources", [])}
+            else:
+                with self._lock:
+                    self.state.status = AgentStatus.FAILED
+                    self.state.last_error = "超过最大工具调用轮数"
+                yield {"type": "error", "error": "超过最大工具调用轮数"}
             
         except Exception as e:
             with self._lock:
@@ -1001,6 +1037,7 @@ class AgentManager:
             kb_ids TEXT DEFAULT '[]',
             kb_top_k INTEGER DEFAULT 5,
             kb_score_threshold REAL DEFAULT 0.5,
+            show_sources INTEGER DEFAULT 1,
             memory_enabled INTEGER DEFAULT 1,
             short_term_turns INTEGER DEFAULT 20,
             long_term_summary_interval INTEGER DEFAULT 10,
@@ -1033,11 +1070,13 @@ class AgentManager:
         """)
         # 兼容旧表：补充新增列
         cols = [r[1] for r in conn.execute("PRAGMA table_info(agents)").fetchall()]
-        if cols and "workflow_id" not in cols:
-            try:
-                conn.execute("ALTER TABLE agents ADD COLUMN workflow_id TEXT DEFAULT ''")
-            except Exception:
-                pass
+        if cols:
+            for col, ddl in (("workflow_id", "TEXT DEFAULT ''"), ("show_sources", "INTEGER DEFAULT 1")):
+                if col not in cols:
+                    try:
+                        conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {ddl}")
+                    except Exception:
+                        pass
         conn.commit()
         conn.close()
     
@@ -1052,16 +1091,17 @@ class AgentManager:
         conn = db.get_conn()
         conn.execute("""INSERT INTO agents 
             (id,name,description,icon,category,system_prompt,model_preference,max_context,temperature,top_p,
-             builtin_tools,skill_ids,mcp_ids,connector_ids,workflow_id,kb_ids,kb_top_k,kb_score_threshold,
+             builtin_tools,skill_ids,mcp_ids,connector_ids,workflow_id,kb_ids,kb_top_k,kb_score_threshold,show_sources,
              memory_enabled,short_term_turns,long_term_summary_interval,user_profile_enabled,
              max_rounds,max_tokens_per_round,stop_sequences,sub_agents,collaboration_mode,
              prompt_templates,response_format,enable_reasoning,auto_approve_tools,
              is_builtin,enabled,version,created_by,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (config.id, config.name, config.description, config.icon, config.category,
              config.system_prompt, config.model_preference, config.max_context, config.temperature, config.top_p,
              json.dumps(config.builtin_tools), json.dumps(config.skill_ids), json.dumps(config.mcp_ids),
              json.dumps(config.connector_ids), config.workflow_id, json.dumps(config.kb_ids), config.kb_top_k, config.kb_score_threshold,
+             1 if config.show_sources else 0,
              1 if config.memory_enabled else 0, config.short_term_turns, config.long_term_summary_interval,
              1 if config.user_profile_enabled else 0, config.max_rounds, config.max_tokens_per_round,
              json.dumps(config.stop_sequences), json.dumps(config.sub_agents), config.collaboration_mode,
@@ -1106,7 +1146,7 @@ class AgentManager:
         conn.execute("""UPDATE agents SET
             name=?, description=?, icon=?, category=?, system_prompt=?, model_preference=?,
             max_context=?, temperature=?, top_p=?, builtin_tools=?, skill_ids=?, mcp_ids=?,
-            connector_ids=?, workflow_id=?, kb_ids=?, kb_top_k=?, kb_score_threshold=?,
+            connector_ids=?, workflow_id=?, kb_ids=?, kb_top_k=?, kb_score_threshold=?, show_sources=?,
             memory_enabled=?, short_term_turns=?, long_term_summary_interval=?, user_profile_enabled=?,
             max_rounds=?, max_tokens_per_round=?, stop_sequences=?, sub_agents=?, collaboration_mode=?,
             prompt_templates=?, response_format=?, enable_reasoning=?, auto_approve_tools=?,
@@ -1116,6 +1156,7 @@ class AgentManager:
              config.model_preference, config.max_context, config.temperature, config.top_p,
              json.dumps(config.builtin_tools), json.dumps(config.skill_ids), json.dumps(config.mcp_ids),
              json.dumps(config.connector_ids), config.workflow_id, json.dumps(config.kb_ids), config.kb_top_k, config.kb_score_threshold,
+             1 if config.show_sources else 0,
              1 if config.memory_enabled else 0, config.short_term_turns, config.long_term_summary_interval,
              1 if config.user_profile_enabled else 0, config.max_rounds, config.max_tokens_per_round,
              json.dumps(config.stop_sequences), json.dumps(config.sub_agents), config.collaboration_mode,
@@ -1167,7 +1208,7 @@ class AgentManager:
             except:
                 d[k] = [] if k != "prompt_templates" else {}
         # 布尔字段
-        for k in ("memory_enabled", "user_profile_enabled", "enable_reasoning", "auto_approve_tools", "is_builtin", "enabled"):
+        for k in ("memory_enabled", "user_profile_enabled", "enable_reasoning", "auto_approve_tools", "is_builtin", "enabled", "show_sources"):
             d[k] = bool(d.get(k, 0))
         return AgentConfig.from_dict(d)
 

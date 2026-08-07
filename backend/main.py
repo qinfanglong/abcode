@@ -8,9 +8,9 @@ import random
 import string
 import mimetypes
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -24,6 +24,7 @@ import mcp_client
 import connector as connector_mod
 import updater
 import workflow_mod as workflow_mod
+import channels as channels_mod
 
 app = FastAPI(title="ABcode", version=updater.VERSION)
 
@@ -53,6 +54,8 @@ def startup():
     skills_mod.init_builtins()
     connector_mod.init_builtins()
     db.init_channels_table()
+    db.init_channel_qr_codes_table()
+    db.channel_msg_table()
     db.init_workflows_table()
     # 初始化内置智能体
     from agent_runtime import init_builtin_agents
@@ -64,6 +67,12 @@ def startup():
     if settings.get("auto_update_enabled", "true").lower() == "true":
         interval = int(settings.get("auto_update_interval", "24"))
         updater.start_auto_check(interval)
+
+    # 启动频道运行时（钉钉 Stream 等）
+    try:
+        channels_mod.start_dingtalk_runtime()
+    except Exception as e:
+        print(f"[channel] 频道运行时启动异常: {e}")
 
 
 def run_cron_job(job):
@@ -349,92 +358,6 @@ def api_list_shared(user_id: str = None):
     return db.list_shared_conversations(user_id)
 
 
-# ================= 专家套件 =================
-class ExpertBody(BaseModel):
-    id: str = ""
-    name: str
-    category: str = "general"
-    icon: str = "🤖"
-    description: str = ""
-    system_prompt: str = ""
-    tools: list = []
-    model_preference: str = ""
-    max_context: int = 0
-    enabled: bool = True
-
-
-@app.get("/api/experts")
-def api_list_experts(category: str = None):
-    return db.list_experts(category)
-
-
-@app.get("/api/experts/{eid}")
-def api_get_expert(eid: str):
-    e = db.get_expert(eid)
-    if not e:
-        raise HTTPException(404, "Expert not found")
-    return e
-
-
-@app.post("/api/experts")
-def api_create_expert(body: ExpertBody):
-    eid = body.id or f"exp_{uuid.uuid4().hex[:8]}"
-    db.upsert_expert({
-        "id": eid, "name": body.name, "category": body.category, "icon": body.icon,
-        "description": body.description, "system_prompt": body.system_prompt,
-        "tools": body.tools, "model_preference": body.model_preference,
-        "max_context": body.max_context, "enabled": body.enabled, "is_builtin": False,
-    })
-    return {"id": eid}
-
-
-@app.put("/api/experts/{eid}")
-def api_update_expert(eid: str, body: ExpertBody):
-    e = db.get_expert(eid)
-    is_builtin = e.get("is_builtin", False) if e else False
-    db.upsert_expert({
-        "id": eid, "name": body.name, "category": body.category, "icon": body.icon,
-        "description": body.description, "system_prompt": body.system_prompt,
-        "tools": body.tools, "model_preference": body.model_preference,
-        "max_context": body.max_context, "enabled": body.enabled, "is_builtin": is_builtin,
-    })
-    return {"ok": True}
-
-
-@app.delete("/api/experts/{eid}")
-def api_delete_expert(eid: str):
-    db.delete_expert(eid)
-    return {"ok": True}
-
-
-@app.post("/api/experts/{eid}/use")
-def api_use_expert(eid: str):
-    db.record_expert_usage(eid)
-    return {"ok": True}
-
-
-@app.post("/api/experts/{eid}/apply")
-def api_apply_expert(eid: str, body: dict = None):
-    """应用专家配置到当前会话"""
-    e = db.get_expert(eid)
-    if not e:
-        raise HTTPException(404, "Expert not found")
-    db.record_expert_usage(eid)
-    
-    # 保存专家关联到会话
-    conv_id = body.get("conv_id") if body else None
-    if conv_id:
-        db.set_conv_expert(conv_id, eid)
-    
-    return {
-        "ok": True,
-        "expert": e,
-        "system_prompt": e.get("system_prompt", ""),
-        "tools": e.get("tools", []),
-        "model_preference": e.get("model_preference", ""),
-    }
-
-
 # ================= 搜索引擎 =================
 from search_engine.engine import search as engine_search, search_multi
 
@@ -470,17 +393,6 @@ def build_tools(conv_id=None):
         tools += mcp_client.mcp_tools_for(None)
         tools += connector_mod.connector_tools_for(None)
     return tools
-
-
-def get_conv_expert(conv_id):
-    """获取会话关联的专家配置"""
-    if not conv_id:
-        return None
-    ct = db.get_conv_tools(conv_id)
-    expert_id = ct.get("expert_id", "")
-    if not expert_id:
-        return None
-    return db.get_expert(expert_id)
 
 
 def build_tools_filtered(conv_id=None, skills_enabled=True, mcp_enabled=True):
@@ -695,18 +607,12 @@ def _message_content_with_attachments(text, attachments):
 
 def agent_loop(provider, model, body, rag_context):
     """Agent 主循环：模型 <-> 工具，最多 5 轮"""
-    # 获取会话关联的专家
-    expert = get_conv_expert(body.conv_id)
-    
-    # 构建系统提示：专家优先，否则用默认
-    if expert and expert.get("system_prompt"):
-        sys_prompt = expert["system_prompt"]
-    else:
-        sys_prompt = (
-            "你是 ABcode，一个 AI Agent 助手。你可以使用工具来完成任务："
-            "联网搜索实时信息、抓取网页、读写工作区文件、执行安全命令。"
-            "需要时主动调用工具，不要编造信息。回答用中文，简洁清晰。"
-        )
+    # 构建系统提示
+    sys_prompt = (
+        "你是 ABcode，一个 AI Agent 助手。你可以使用工具来完成任务："
+        "联网搜索实时信息、抓取网页、读写工作区文件、执行安全命令。"
+        "需要时主动调用工具，不要编造信息。回答用中文，简洁清晰。"
+    )
     # 注入实时时间
     from time_utils import get_current_time_str, TIME_PROMPT_TPL
     sys_prompt += TIME_PROMPT_TPL.format(time=get_current_time_str())
@@ -731,13 +637,8 @@ def agent_loop(provider, model, body, rag_context):
     if body.attachments:
         messages[-1] = {"role": "user", "content": _message_content_with_attachments(body.message, body.attachments)}
     
-    # 根据开关构建可用工具列表（包含专家配置的工具）
+    # 根据开关构建可用工具列表
     tools = build_tools_filtered(body.conv_id, body.skills_enabled, body.mcp_enabled)
-    # 专家额外工具
-    if expert and expert.get("tools"):
-        expert_tools = json.loads(expert["tools"]) if isinstance(expert["tools"], str) else expert["tools"]
-        if expert_tools:
-            tools += expert_tools
     
     max_rounds = 5
 
@@ -1186,6 +1087,183 @@ def api_channels_config(cid: str, body: dict):
     return {"ok": True}
 
 
+# ===== 频道扫码接入 =====
+QR_TTL = 600  # 二维码 10 分钟有效
+
+def _detect_lan_ip():
+    """自动检测本机局域网 IP，供手机扫码访问（127.0.0.1 手机扫不开）"""
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # 连接一个外部地址（不发包）以触发路由，获取本机出口 IP
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        try:
+            import subprocess
+            out = subprocess.check_output(["ipconfig", "getifaddr", "en0"]).decode().strip()
+            if out:
+                return out
+        except Exception:
+            pass
+        return "127.0.0.1"
+
+
+def _qr_url_for(code):
+    base = os.environ.get("ABCODE_PUBLIC_BASE", "")
+    if not base:
+        base = f"http://{_detect_lan_ip()}:8900"
+    return f"{base}/channel/{code}"
+
+
+@app.post("/api/channels/{cid}/qr")
+def api_channel_qr_create(cid: str):
+    ch = db.get_channel(cid)
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    # 每次生成全新二维码：旧的 pending 码立即作废（频繁刷新也能拿到新码）
+    old = db.get_latest_channel_qr(cid)
+    if old and old.get("status") == "pending":
+        db.update_channel_qr_status(old["code"], "expired")
+    code = f"qr_{uuid.uuid4().hex[:12]}"
+    db.create_channel_qr(cid, code, time.time() + QR_TTL)
+    return {"ok": True, "code": code, "url": _qr_url_for(code), "expires_in": QR_TTL}
+
+
+@app.get("/api/channels/{cid}/qr/png")
+def api_channel_qr_png(cid: str, code: str = ""):
+    ch = db.get_channel(cid)
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    if not code:
+        latest = db.get_latest_channel_qr(cid)
+        code = latest["code"] if latest else ""
+    if not code:
+        raise HTTPException(404, "请先生成接入二维码")
+    import io
+    import segno
+    url = _qr_url_for(code)
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(buf, kind="png", scale=6, border=2)
+    buf.seek(0)
+    from fastapi.responses import Response
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/channels/{cid}/qr/status")
+def api_channel_qr_status(cid: str):
+    latest = db.get_latest_channel_qr(cid)
+    if not latest:
+        return {"status": "none"}
+    if latest["expires_at"] < time.time() and latest["status"] == "pending":
+        return {"status": "expired"}
+    return {"status": latest["status"], "code": latest["code"]}
+
+
+@app.post("/api/channels/qr/confirm")
+def api_channel_qr_confirm(body: dict):
+    code = (body or {}).get("code", "")
+    qr = db.get_channel_qr(code) if code else None
+    if not qr:
+        raise HTTPException(404, "二维码无效或已失效")
+    if qr["status"] == "expired":
+        raise HTTPException(410, "二维码已作废，请扫描最新二维码")
+    if qr["expires_at"] < time.time():
+        db.update_channel_qr_status(code, "expired")
+        raise HTTPException(410, "二维码已过期，请重新生成")
+    if qr["status"] == "confirmed":
+        return {"ok": True, "channel": qr["cid"]}
+    ch = db.get_channel(qr["cid"])
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    db.update_channel_qr_status(code, "confirmed")
+    db.upsert_channel({**ch, "enabled": 1})
+    return {"ok": True, "channel": qr["cid"], "channel_name": ch.get("name", "")}
+
+
+@app.get("/channel/{code}")
+def api_channel_qr_page(code: str, request: Request):
+    """手机扫码打开的确认接入页"""
+    qr = db.get_channel_qr(code)
+    if not qr:
+        return HTMLResponse("<h3>二维码无效或已失效</h3>")
+    ch = db.get_channel(qr["cid"]) or {}
+    expired = qr["expires_at"] < time.time() or qr["status"] == "expired"
+    confirmed = qr["status"] == "confirmed"
+    name = (ch.get("name") or "未知频道").replace("<", "&lt;").replace(">", "&gt;")
+    if expired:
+        msg = f"<h3>❌ 二维码已失效，请重新生成最新二维码</h3><p>频道：{name}</p>"
+    elif confirmed:
+        msg = f"<h3>✅ 已接入</h3><p>频道「{name}」已成功接入，请关闭本页面。</p>"
+    else:
+        msg = f"""
+        <h3>📡 {name}</h3>
+        <p>确认将该频道接入 ABcode 吗？</p>
+        <button onclick="confirmQr()" style="...">✅ 确认接入</button>
+        <p id="msg"></p>
+        <script>
+          async function confirmQr() {{
+            const r = await fetch('/api/channels/qr/confirm', {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/json'}},
+              body: JSON.stringify({{code: '{code}'}})
+            }});
+            const d = await r.json();
+            if (r.ok) {{
+              document.body.innerHTML = '<h3>✅ 接入成功</h3><p>频道「{name}」已启用，请关闭本页面。</p>';
+            }} else {{
+              document.getElementById('msg').textContent = d.detail || '接入失败';
+            }}
+          }}
+        </script>
+        """
+    return HTMLResponse(f"<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>频道接入确认</title><style>body{{font-family:-apple-system,sans-serif;max-width:420px;margin:60px auto;padding:0 20px;text-align:center;color:#222}}button{{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:12px 28px;font-size:16px;margin-top:12px}}</style></head><body>{msg}</body></html>")
+
+
+# ===== 频道消息收发 =====
+@app.post("/api/channels/{cid}/webhook")
+def api_channel_webhook(cid: str, payload: dict = Body(default={})):
+    ch = db.get_channel(cid)
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    if not ch.get("enabled"):
+        raise HTTPException(400, "该频道未启用，请先扫码/启用后再接入")
+    return channels_mod.handle_webhook(cid, payload or {})
+
+
+@app.get("/api/channels/{cid}/messages")
+def api_channel_messages(cid: str, limit: int = 100):
+    ch = db.get_channel(cid)
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    return db.list_channel_msgs(cid, limit)
+
+
+@app.delete("/api/channels/{cid}/messages")
+def api_channel_messages_clear(cid: str):
+    ch = db.get_channel(cid)
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    db.clear_channel_msgs(cid)
+    return {"ok": True}
+
+
+@app.post("/api/channels/{cid}/send")
+def api_channel_send(cid: str, body: dict = Body(default={})):
+    """直接在频道内向指定发送者模拟回复（用于测试/手动触发）。"""
+    ch = db.get_channel(cid)
+    if not ch:
+        raise HTTPException(404, "频道不存在")
+    sender = (body or {}).get("sender") or "用户"
+    text = (body or {}).get("text") or ""
+    if not text.strip():
+        raise HTTPException(400, "缺少 text 字段")
+    reply = channels_mod.reply_to_channel(cid, sender, text)
+    return {"ok": True, "reply": reply}
+
+
 # ================= 会话工具配置 =================
 class ConvToolsBody(BaseModel):
     skill_ids: list = None
@@ -1579,6 +1657,7 @@ class AgentBody(BaseModel):
     kb_ids: list = []
     kb_top_k: int = 5
     kb_score_threshold: float = 0.5
+    show_sources: bool = True
     memory_enabled: bool = True
     short_term_turns: int = 20
     long_term_summary_interval: int = 10

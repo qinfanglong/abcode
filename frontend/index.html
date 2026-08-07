@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ABcode - AI Agent 工具</title>
-<link rel="stylesheet" href="style.css?v=20260807c">
+<link rel="stylesheet" href="style.css?v=20260808a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f6ef7'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>AB</text></svg>">
 </head>
 <body>
@@ -42,7 +42,6 @@
     <div class="sidebar-footer">
       <button id="agent-btn" class="btn-sidebar">🤖 智能体</button>
       <button id="team-btn" class="btn-sidebar">👥 团队协作</button>
-      <button id="expert-btn" class="btn-sidebar">🎯 专家套件</button>
       <button id="workflow-btn" class="btn-sidebar">⚡ 工作流</button>
       <button id="tools-btn" class="btn-sidebar">🧩 技能 / MCP / 连接器</button>
       <button id="kb-btn" class="btn-sidebar">📚 知识库</button>
@@ -282,22 +281,21 @@
     <div class="modal-body" style="padding:0; display:flex; max-height:calc(90vh - 60px); overflow:hidden;">
       <!-- 左侧列表 -->
       <div style="width:300px; min-width:300px; border-right:1px solid var(--border); display:flex; flex-direction:column;">
-        <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-          <div style="display:flex; gap:6px; flex-wrap:wrap;" id="agent-cat-tabs">
-            <button class="agent-cat-tab active" data-cat="all">全部</button>
-            <button class="agent-cat-tab" data-cat="coding">编程</button>
-            <button class="agent-cat-tab" data-cat="research">研究</button>
-            <button class="agent-cat-tab" data-cat="analysis">分析</button>
-            <button class="agent-cat-tab" data-cat="product">产品</button>
-            <button class="agent-cat-tab" data-cat="writing">写作</button>
-            <button class="agent-cat-tab" data-cat="security">安全</button>
-            <button class="agent-cat-tab" data-cat="language">语言</button>
+        <div style="padding:12px 16px; border-bottom:1px solid var(--border);">
+          <div style="display:flex; gap:6px;" id="agent-source-tabs">
+            <button class="agent-source-tab" data-source="builtin">🏠 内置</button>
+            <button class="agent-source-tab active" data-source="created">🛠 创建</button>
           </div>
         </div>
         <div style="padding:10px 16px; border-bottom:1px solid var(--border);">
-          <button class="btn-save" onclick="openAgentForm(null)" style="width:100%;">＋ 新建智能体</button>
+          <button id="agent-create-btn" class="btn-save" onclick="openAgentForm(null)" style="width:100%;">＋ 新建智能体</button>
         </div>
         <div id="agent-list" style="flex:1; overflow-y:auto; padding:8px;"></div>
+        <div id="agent-pagination" style="display:none; padding:8px 12px; border-top:1px solid var(--border); justify-content:center; align-items:center; gap:10px;">
+          <button class="agent-page-btn" onclick="agentPage(-1)" title="上一页">‹</button>
+          <span id="agent-page-info" style="font-size:12px; color:var(--text-secondary);"></span>
+          <button class="agent-page-btn" onclick="agentPage(1)" title="下一页">›</button>
+        </div>
       </div>
       <!-- 右侧详情/编辑 -->
       <div id="agent-detail-panel" style="flex:1; overflow-y:auto; padding:20px; background:var(--card-bg);">
@@ -326,46 +324,6 @@
     <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid var(--border);">
       <button class="btn-test" onclick="closeAgentTestModal()">取消</button>
       <button class="btn-save" onclick="confirmAgentTest()">▶ 开始测试</button>
-    </div>
-  </div>
-</div>
-
-<div id="expert-modal" class="modal" style="display:none">
-  <div class="modal-content" style="width:800px">
-    <div class="modal-header">
-      <h2>🎯 专家套件</h2>
-      <button class="modal-close" onclick="closeModal('expert-modal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="expert-tabs">
-        <button class="expert-tab active" data-category="all">全部</button>
-        <button class="expert-tab" data-category="coding">编程</button>
-        <button class="expert-tab" data-category="writing">写作</button>
-        <button class="expert-tab" data-category="analysis">分析</button>
-        <button class="expert-tab" data-category="research">研究</button>
-        <button class="expert-tab" data-category="language">语言</button>
-        <button class="expert-tab" data-category="security">安全</button>
-        <button class="expert-tab" data-category="product">产品</button>
-      </div>
-      <div id="expert-grid" class="expert-grid"></div>
-      <div id="expert-detail" class="expert-detail" style="display:none">
-        <div class="expert-detail-header">
-          <span id="expert-detail-icon" class="expert-icon"></span>
-          <div>
-            <h3 id="expert-detail-name"></h3>
-            <p id="expert-detail-desc"></p>
-          </div>
-          <button class="btn-use-expert" onclick="useCurrentExpert()">使用此专家</button>
-        </div>
-        <div class="expert-detail-body">
-          <label>系统提示词</label>
-          <textarea id="expert-detail-prompt" rows="6" readonly></textarea>
-          <label>可用工具</label>
-          <div id="expert-detail-tools" class="expert-tools"></div>
-          <label>推荐模型</label>
-          <div id="expert-detail-model" class="expert-model"></div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -1105,9 +1063,73 @@
   </div>
 </div>
 
+<!-- 频道配置弹窗 -->
+<div id="channel-config-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:560px; max-width:92vw;">
+    <div class="modal-header">
+      <h2 id="chcfg-title">⚙ 频道配置</h2>
+      <button class="modal-close" onclick="closeChannelConfig()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="chcfg-fields" class="chcfg-fields"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="ch-btn" onclick="closeChannelConfig()">取消</button>
+        <button class="btn-save" onclick="saveChannelConfig()">保存配置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道扫码接入弹窗 -->
+<div id="channel-qr-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:420px; max-width:92vw;">
+    <div class="modal-header">
+      <h2 id="chqr-title">📱 扫码接入</h2>
+      <button class="modal-close" onclick="closeChannelQr()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <div id="chqr-qr" style="margin:12px auto; width:260px; height:260px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+        <span class="hint" style="color:var(--muted)">生成中…</span>
+      </div>
+      <p id="chqr-tip" class="hint">请用手机扫码，在手机上确认接入该频道</p>
+      <p id="chqr-status" class="hint" style="min-height:20px;"></p>
+      <p id="chqr-webhook-hint" class="hint" style="font-size:12px;color:var(--muted);text-align:left;word-break:break-all;background:var(--bg2,#f4f4f5);padding:8px 10px;border-radius:8px;margin-top:6px;"></p>
+      <div style="display:flex; justify-content:center; gap:8px; margin-top:8px;">
+        <button class="ch-btn" onclick="closeChannelQr()">关闭</button>
+        <button class="ch-btn" onclick="openChannelQr(currentQrChannelId)">刷新二维码</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道消息记录弹窗 -->
+<div id="channel-msgs-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:640px; max-width:94vw;">
+    <div class="modal-header">
+      <h2 id="chmsgs-title">💬 频道消息</h2>
+      <button class="modal-close" onclick="closeChannelMsgs()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="chmsgs-list" style="max-height:46vh; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg2,#fafafa);"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+        <span class="hint" style="font-size:12px;">通用频道收发地址：<code id="chmsgs-webhook" style="background:#fff;padding:2px 6px;border-radius:4px;"></code></span>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <input id="chmsgs-test-sender" type="text" value="测试用户" placeholder="发送者(可选)" style="flex:0 0 110px;">
+        <input id="chmsgs-test-text" type="text" placeholder="输入消息，回车发送（模拟频道对话）" style="flex:1;">
+        <button class="ch-btn" onclick="sendChannelTestMsg()">发送</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:10px;">
+        <button class="ch-btn" onclick="clearChannelMsgs()">🗑 清空消息</button>
+        <button class="btn-save" onclick="closeChannelMsgs()">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 消息内容渲染器（Markdown 轻量渲染，本地化无外网依赖） -->
 <script src="marked.min.js"></script>
 <script src="highlight.min.js"></script>
-<script src="app.js?v=20260807e"></script>
+<script src="app.js?v=20260808a"></script>
 </body>
 </html>

@@ -313,8 +313,6 @@ def init_db():
         pass
     conn.commit()
     conn.close()
-    # 初始化内置专家套件
-    _init_builtin_experts()
     # 初始化默认搜索设置
     _init_default_search_settings()
 
@@ -329,203 +327,6 @@ def _init_default_search_settings():
     except Exception:
         pass
 
-
-def _init_builtin_experts():
-    """初始化内置专家套件"""
-    builtin_experts = [
-        {
-            "id": "exp_coder",
-            "name": "编程专家",
-            "category": "coding",
-            "icon": "💻",
-            "description": "专业的代码编写、调试、重构专家，支持多种编程语言",
-            "system_prompt": "你是一个专业的编程专家。你擅长代码编写、调试、重构和优化。请用清晰、简洁的方式回答编程相关问题，提供可运行的代码示例。",
-            "tools": ["shell", "file_read", "file_write"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "code_review": "请帮我审查这段代码，关注：\n1. 代码风格和规范\n2. 潜在Bug和边界情况\n3. 性能优化建议\n4. 安全隐患\n5. 可维护性改进",
-                "debug": "请帮我调试这个问题：\n1. 分析错误堆栈\n2. 定位根因\n3. 提供修复方案\n4. 预防措施建议",
-                "refactor": "请帮我重构这段代码，目标：\n1. 提高可读性\n2. 降低复杂度\n3. 增强可测试性\n4. 遵循设计模式最佳实践",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_writer",
-            "name": "写作专家",
-            "category": "writing",
-            "icon": "✍️",
-            "description": "专业的文案写作、内容创作、润色专家",
-            "system_prompt": "你是一个专业的写作专家。你擅长各类文案写作、内容创作、文章润色和编辑。请用优美、流畅的中文回答写作相关问题。",
-            "tools": ["file_read", "file_write"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "polish": "请帮我润色这段文字，要求：\n1. 保持原意\n2. 语言更流畅优美\n3. 修正语病\n4. 提升专业度",
-                "rewrite": "请按以下风格重写：\n- 风格：{{style}}\n- 目标受众：{{audience}}\n- 字数要求：{{length}}",
-                "outline": "请为主题「{{topic}}」生成大纲，包含：\n1. 核心论点\n2. 章节结构\n3. 关键论据\n4. 结语方向",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_analyst",
-            "name": "数据分析专家",
-            "category": "analysis",
-            "icon": "📊",
-            "description": "专业的数据分析、可视化、报表专家",
-            "system_prompt": "你是一个专业的数据分析专家。你擅长数据处理、统计分析、可视化和报表制作。请用准确、专业的方式回答数据分析相关问题。",
-            "tools": ["shell", "file_read", "file_write"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "explore": "请对这份数据进行探索性分析：\n1. 数据概况（行数、列、类型、缺失值）\n2. 描述性统计\n3. 分布可视化建议\n4. 异常值检测\n5. 相关性初步分析",
-                "report": "请生成数据分析报告：\n1. 业务背景与目标\n2. 数据来源与处理\n3. 关键发现（含图表）\n4. 结论与建议\n5. 后续行动计划",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_architect",
-            "name": "架构设计专家",
-            "category": "coding",
-            "icon": "🏗️",
-            "description": "专业的系统架构设计、技术选型、方案评审专家",
-            "system_prompt": "你是一个专业的系统架构设计专家。你擅长系统架构设计、技术选型、方案评审和性能优化。请用专业、全面的方式回答架构设计相关问题。",
-            "tools": ["shell", "file_read", "file_write", "web_search"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "design": "请为以下需求设计系统架构：\n1. 业务需求分析\n2. 核心模块拆分\n3. 技术选型对比\n4. 数据流设计\n5. 部署拓扑\n6. 非功能性指标（性能、可用性、扩展性）\n7. 风险与应对",
-                "review": "请评审这个架构方案：\n1. 合理性分析\n2. 潜在瓶颈\n3. 单点故障\n4. 扩展性评估\n5. 成本估算\n6. 改进建议",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_researcher",
-            "name": "研究分析专家",
-            "category": "research",
-            "icon": "🔬",
-            "description": "专业的文献调研、技术研究、趋势分析专家",
-            "system_prompt": "你是一个专业的研究分析专家。你擅长文献调研、技术研究、趋势分析和报告撰写。请用客观、深入的方式回答研究分析相关问题。",
-            "tools": ["web_search", "file_read", "file_write"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "literature": "请对「{{topic}}」进行文献调研：\n1. 核心概念定义\n2. 发展历程\n3. 主流方法/流派对比\n4. 关键论文/专利\n5. 研究空白与机会\n6. 未来趋势预测",
-                "trend": "请分析「{{domain}}」的技术趋势：\n1. 当前主流技术栈\n2. 新兴技术雷达\n3. 行业应用案例\n4. 投资/关注热度\n5. 技术成熟度曲线\n6. 机会与风险",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_translator",
-            "name": "翻译专家",
-            "category": "language",
-            "icon": "🌐",
-            "description": "专业的多语言翻译、本地化、术语管理专家",
-            "system_prompt": "你是一个专业的翻译专家。你擅长多语言翻译、本地化和术语管理。请用准确、地道的方式完成翻译任务，注意保持原文的风格和语境。",
-            "tools": [],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "translate": "请将以下内容翻译为{{target_lang}}：\n- 保持原文语气风格\n- 专业术语准确\n- 符合目标语言习惯\n- 保留格式标记",
-                "localize": "请对以下内容进行本地化：\n- 目标市场：{{market}}\n- 文化适配调整\n- 单位/日期/货币转换\n- 法规合规检查",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_security",
-            "name": "安全审计专家",
-            "category": "security",
-            "icon": "🔒",
-            "description": "专业的代码安全审计、漏洞分析、安全加固专家",
-            "system_prompt": "你是一个专业的安全审计专家。你擅长代码安全审计、漏洞分析、安全加固和渗透测试。请用专业、严谨的方式回答安全相关问题。",
-            "tools": ["shell", "file_read", "web_search"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "audit": "请对这段代码进行安全审计：\n1. 输入验证与注入风险\n2. 认证授权缺陷\n3. 敏感数据泄露\n4. 加密使用正确性\n5. 依赖漏洞扫描\n6. 修复优先级建议",
-                "threat_model": "请为「{{system}}」建立威胁模型：\n1. 资产识别\n2. 信任边界\n3. STRIDE威胁分析\n4. 攻击面评估\n5. 缓解措施\n6. 剩余风险",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-        {
-            "id": "exp_pm",
-            "name": "产品经理专家",
-            "category": "product",
-            "icon": "🎯",
-            "description": "专业的产品规划、需求分析、竞品分析专家",
-            "system_prompt": "你是一个专业的产品经理专家。你擅长产品规划、需求分析、竞品分析和用户研究。请用清晰、全面的方式回答产品相关问题。",
-            "tools": ["web_search", "file_read", "file_write"],
-            "skill_ids": [],
-            "mcp_ids": [],
-            "kb_ids": [],
-            "workflow_ids": [],
-            "prompt_templates": {
-                "prd": "请为「{{feature}}」编写PRD：\n1. 背景与目标\n2. 用户故事\n3. 功能规格\n4. 非功能需求\n5. 交互原型描述\n6. 数据指标\n7. 发布计划\n8. 风险评估",
-                "competitor": "请分析「{{product}}」的竞品：\n1. 竞品矩阵\n2. 核心功能对比\n3. 定价策略\n4. 用户评价分析\n5. 差异化机会\n6. 进入建议",
-            },
-            "model_preference": "",
-            "max_context": 128000,
-            "auto_model": 1,
-            "is_builtin": True,
-            "enabled": True,
-        },
-    ]
-    conn = get_conn()
-    for e in builtin_experts:
-        conn.execute("""INSERT OR IGNORE INTO experts (id,name,category,icon,description,system_prompt,tools,skill_ids,mcp_ids,kb_ids,workflow_ids,prompt_templates,model_preference,max_context,auto_model,is_builtin,enabled,created_at)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                     (e["id"], e["name"], e["category"], e["icon"], e["description"],
-                      e["system_prompt"], json.dumps(e["tools"]), json.dumps(e["skill_ids"]),
-                      json.dumps(e["mcp_ids"]), json.dumps(e["kb_ids"]), json.dumps(e["workflow_ids"]),
-                      json.dumps(e["prompt_templates"]), e["model_preference"],
-                      e["max_context"], e["auto_model"], 1, 1, time.time()))
-    conn.commit()
-    conn.close()
-
-
-# ---------- 会话 ----------
 def create_conversation(title="新对话", model=""):
     cid = f"c{int(time.time()*1000)}"
     now = time.time()
@@ -909,6 +710,50 @@ def get_channel(cid):
     return d
 
 
+def init_channel_qr_codes_table():
+    """确保频道扫码接入码表存在"""
+    conn = get_conn()
+    conn.execute("""CREATE TABLE IF NOT EXISTS channel_qr_codes (
+        code TEXT PRIMARY KEY,
+        cid TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at REAL,
+        expires_at REAL
+    )""")
+    conn.commit()
+    conn.close()
+
+
+def create_channel_qr(cid, code, expires_at):
+    conn = get_conn()
+    now = time.time()
+    conn.execute("INSERT INTO channel_qr_codes (code, cid, status, created_at, expires_at) VALUES (?,?,?,?,?)",
+                 (code, cid, "pending", now, expires_at))
+    conn.commit()
+    conn.close()
+
+
+def get_channel_qr(code):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM channel_qr_codes WHERE code=?", (code,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_latest_channel_qr(cid):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM channel_qr_codes WHERE cid=? ORDER BY created_at DESC LIMIT 1", (cid,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_channel_qr_status(code, status):
+    conn = get_conn()
+    conn.execute("UPDATE channel_qr_codes SET status=? WHERE code=?", (status, code))
+    conn.commit()
+    conn.close()
+
+
 def upsert_channel(ch):
     conn = get_conn()
     conn.execute("""INSERT INTO channels (id,name,type,icon,builtin,enabled,bot_prefix,config,description,created_at)
@@ -928,6 +773,45 @@ def upsert_channel(ch):
 def delete_channel(cid):
     conn = get_conn()
     conn.execute("DELETE FROM channels WHERE id=? AND builtin=0", (cid,))
+    conn.commit()
+    conn.close()
+
+
+# ---------- 频道消息记录 ----------
+def channel_msg_table():
+    conn = get_conn()
+    conn.execute("""CREATE TABLE IF NOT EXISTS channel_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cid TEXT, sender TEXT, role TEXT, content TEXT, created_at REAL
+    )""")
+    conn.commit()
+    conn.close()
+
+
+def add_channel_msg(cid, sender, role, content):
+    conn = get_conn()
+    conn.execute("INSERT INTO channel_messages (cid,sender,role,content,created_at) VALUES (?,?,?,?,?)",
+                 (cid, sender or "匿名", role, content, time.time()))
+    # 每个频道仅保留最近 200 条，避免无限增长
+    conn.execute("""DELETE FROM channel_messages WHERE cid=? AND id NOT IN
+                  (SELECT id FROM channel_messages WHERE cid=? ORDER BY id DESC LIMIT 200)""",
+                 (cid, cid))
+    conn.commit()
+    conn.close()
+
+
+def list_channel_msgs(cid, limit=100):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT sender,role,content,created_at FROM channel_messages WHERE cid=? ORDER BY id DESC LIMIT ?",
+        (cid, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def clear_channel_msgs(cid):
+    conn = get_conn()
+    conn.execute("DELETE FROM channel_messages WHERE cid=?", (cid,))
     conn.commit()
     conn.close()
 
@@ -1007,107 +891,6 @@ def list_shared_conversations(user_id=None):
         rows = conn.execute("SELECT * FROM shared_conversations ORDER BY created_at DESC").fetchall()
     conn.close()
     return [dict(r) for r in rows]
-
-
-# ================= 专家套件 =================
-def list_experts(category=None):
-    conn = get_conn()
-    if category:
-        rows = conn.execute("SELECT * FROM experts WHERE category=? AND enabled=1 ORDER BY is_builtin DESC, created_at",
-                           (category,)).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM experts WHERE enabled=1 ORDER BY is_builtin DESC, created_at").fetchall()
-    conn.close()
-    out = []
-    for r in rows:
-        d = dict(r)
-        try:
-            d["tools"] = json.loads(d["tools"] or "[]")
-        except Exception:
-            d["tools"] = []
-        for k in ("skill_ids", "mcp_ids", "kb_ids", "workflow_ids"):
-            try:
-                d[k] = json.loads(d[k] or "[]")
-            except Exception:
-                d[k] = []
-        try:
-            d["prompt_templates"] = json.loads(d["prompt_templates"] or "{}")
-        except Exception:
-            d["prompt_templates"] = {}
-        out.append(d)
-    return out
-
-
-def get_expert(eid):
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM experts WHERE id=?", (eid,)).fetchone()
-    conn.close()
-    if not row:
-        return None
-    d = dict(row)
-    try:
-        d["tools"] = json.loads(d["tools"] or "[]")
-    except Exception:
-        d["tools"] = []
-    for k in ("skill_ids", "mcp_ids", "kb_ids", "workflow_ids"):
-        try:
-            d[k] = json.loads(d[k] or "[]")
-        except Exception:
-            d[k] = []
-    try:
-        d["prompt_templates"] = json.loads(d["prompt_templates"] or "{}")
-    except Exception:
-        d["prompt_templates"] = {}
-    return d
-
-
-def get_conv_expert(conv_id):
-    """获取会话关联的专家"""
-    conv_tools = get_conv_tools(conv_id)
-    expert_id = conv_tools.get("expert_id", "")
-    if not expert_id:
-        return None
-    return get_expert(expert_id)
-
-
-def set_conv_expert(conv_id, expert_id):
-    """设置会话关联的专家"""
-    set_conv_tools(conv_id, expert_id=expert_id)
-
-
-def upsert_expert(e):
-    conn = get_conn()
-    conn.execute("""INSERT INTO experts (id,name,category,icon,description,system_prompt,tools,model_preference,max_context,is_builtin,enabled,created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT(id) DO UPDATE SET
-                      name=excluded.name, category=excluded.category, icon=excluded.icon,
-                      description=excluded.description, system_prompt=excluded.system_prompt,
-                      tools=excluded.tools, model_preference=excluded.model_preference,
-                      max_context=excluded.max_context, enabled=excluded.enabled""",
-                 (e["id"], e.get("name", ""), e.get("category", "general"), e.get("icon", "🤖"),
-                  e.get("description", ""), e.get("system_prompt", ""), json.dumps(e.get("tools", [])),
-                  e.get("model_preference", ""), e.get("max_context", 0), 1 if e.get("is_builtin") else 0,
-                  1 if e.get("enabled", True) else 0, time.time()))
-    conn.commit()
-    conn.close()
-
-
-def delete_expert(eid):
-    conn = get_conn()
-    conn.execute("DELETE FROM experts WHERE id=? AND is_builtin=0", (eid,))
-    conn.commit()
-    conn.close()
-
-
-def record_expert_usage(eid):
-    conn = get_conn()
-    conn.execute("""INSERT INTO expert_stats (expert_id, usage_count, last_used)
-                    VALUES (?, 1, ?)
-                    ON CONFLICT(expert_id) DO UPDATE SET
-                      usage_count=usage_count+1, last_used=excluded.last_used""",
-                 (eid, time.time()))
-    conn.commit()
-    conn.close()
 
 
 # ================= 工作流 =================
