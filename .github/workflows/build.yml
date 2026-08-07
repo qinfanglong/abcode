@@ -67,14 +67,16 @@ jobs:
             backend/main.py
       - name: 创建 AppImage
         run: |
+          set -e
+          echo "VERSION=$VERSION  dist/ABcode size=$(stat -c%s dist/ABcode 2>/dev/null || echo 0)"
           # 创建 AppDir 结构
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-          
+
           # 复制可执行文件
           cp dist/ABcode AppDir/usr/bin/
-          
+
           # 创建 .desktop 文件
           cat > AppDir/usr/share/applications/abcode.desktop << 'EOF'
           [Desktop Entry]
@@ -85,11 +87,11 @@ jobs:
           Categories=Development;Utility;
           Comment=Local AI Agent Desktop App
           EOF
-          
+
           # 复制图标
           cp build/icon.ico AppDir/usr/share/icons/hicolor/256x256/apps/abcode.png 2>/dev/null || \
           cp frontend/abcode_logo.svg AppDir/usr/share/icons/hicolor/256x256/apps/abcode.svg 2>/dev/null || true
-          
+
           # AppRun 入口
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
@@ -97,19 +99,31 @@ jobs:
           export PYTHONPATH="$HERE/usr/bin:$PYTHONPATH"
           exec "$HERE/usr/bin/ABcode" "$@"
           EOF
-          chmod +x AppDir/AppRun
-          
-          # 下载 appimagetool
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage || true
-          if [ ! -f appimagetool-x86_64.AppImage ]; then
-            # 备选下载地址（GitHub 直连有时超时）
-            wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage || true
+          chmod +x AppDir/AppRun AppDir/usr/bin/ABcode
+          echo "AppDir 就绪: $(find AppDir -type f | wc -l) 个文件"
+
+          # 下载 appimagetool（多源重试 + 大小校验）
+          for url in \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"; do
+            echo "尝试下载: $url"
+            if wget -q -O appimagetool.AppImage "$url"; then
+              sz=$(stat -c%s appimagetool.AppImage 2>/dev/null || echo 0)
+              echo "下载完成: $sz bytes"
+              if [ "$sz" -gt 1000000 ]; then break; fi
+            fi
+          done
+          chmod +x appimagetool.AppImage
+          [ -s appimagetool.AppImage ] || { echo "::error title=appimagetool::下载失败或文件为空"; exit 1; }
+
+          # 生成 AppImage（GitHub Actions runner 无 FUSE，需 extract-and-run；失败再回退直接运行）
+          if ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run AppDir "ABcode-linux-${VERSION#v}.AppImage"; then
+            echo "extract-and-run 生成成功"
+          else
+            echo "extract-and-run 失败，回退直接运行..."
+            ARCH=x86_64 ./appimagetool.AppImage AppDir "ABcode-linux-${VERSION#v}.AppImage"
           fi
-          chmod +x appimagetool-x86_64.AppImage
-          
-          # 生成 AppImage（GitHub Actions runner 无 FUSE，需 extract-and-run）
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir ABcode-linux-${VERSION#v}.AppImage || \
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir ABcode-linux-${VERSION#v}.AppImage
+          ls -lh ABcode-linux-*.AppImage
       - name: 创建源码包
         run: |
           mkdir -p dist_linux
@@ -179,12 +193,13 @@ jobs:
           Copy-Item build/icon.ico dist/build/ -Force
           Copy-Item build/banner.bmp dist/build/ -Force
           
-          # 运行 NSIS
+          # 运行 NSIS（注意：NSIS 的宏定义参数须为 -DVERSION=...，/DVERSION 会被当作脚本文件名导致失败）
           $nsisPath = Get-Command makensis.exe -ErrorAction SilentlyContinue
           if (-not $nsisPath) {
             $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
           }
-          & $nsisPath /DVERSION="$version" build/installer.nsi
+          Write-Host "makensis: $nsisPath"
+          & $nsisPath -DVERSION="$version" build/installer.nsi
           
           # 验证安装包
           $installer = Get-ChildItem dist/ABcode-Setup-*.exe -ErrorAction SilentlyContinue
