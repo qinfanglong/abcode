@@ -2,6 +2,33 @@
 
 所有用户可见的变更都记录在此。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.0] - 2026-08-07
+
+### 工作流循环
+- 新增**循环节点后端执行引擎**：遍历数组设置 item/index 变量、执行循环体、收集结果数组、支持嵌套循环与 end/stop 边界
+- 新增 9 种缺失工作流节点：iteration 遍历 / kb_index 入库 / memory 读写清 / mcp_call / json_parse / email / webhook，循环体内 end 边界回退上一节点输出
+- 补齐 9 种节点专属配置面板 + MCP 服务器下拉自动加载
+- 循环节点变量提示：buildVarHints 补充 item/index/loop_id_results 变量 chips
+- 新增 2 个内置工作流模板：批量处理 loop / 数据处理管道 iteration+json_parse，内置模板启动时 upsert 更新
+- 工作流节点输出变量名全面对齐 + code 节点沙箱修复
+- 修复工作流执行记录保存崩溃（output/error 为 dict 时 SQLite binding 失败）
+
+### 知识库 RAG 升级
+- **多知识库支持**：kb 表 + 文档归属 kb_id + 按库检索/统计/清空/导出 + 前端库选择器（新建/切换/删除）
+- **检索质量优化**：BM25 检索算法 + 命中高亮 + 查询侧过滤高频单字 token + 二进制魔数检测防伪装文本
+- **Markdown 标题感知分块**：按 #/##/### 标题切分，分块保留标题上下文，章节级检索精度大幅提升
+- **切片打分排序增强**：混合打分（BM25 归一化 + 短语连续命中 + 覆盖率 + 位置加权）+ MMR 多样性排序 + 阈值过滤 + 前端打分条展示
+- **格式扩展**：支持 PDF（pypdf）/ Word（docx）/ 30 种文本格式，上传去重（content_hash）+ 导出 JSON 备份 + 清空 + 按名称过滤
+- **上下文优化**：build_context 按文档聚合去重 + snippet 命中上下文片段（带省略号）
+- **前端增强**：拖拽上传 + 搜索测试面板（高亮结果预览）+ 快捷引用面板修复
+
+### 聊天与体验
+- 聊天指定知识库：工具栏知识库选择下拉（全部/单库，localStorage 持久化）+ ChatBody.kb_id + build_context 按库检索
+- 修复 _pRaf 未声明导致 init 中断的严重 bug；index.html 静态资源加版本号防缓存
+
+### 许可
+- 新增**有限开源许可证 LICENSE v1.0**：允许学习/研究/个人使用，禁止商用与闭源再分发
+
 ## [0.3.0] - 2026-08-05
 
 ### 工作流能力
