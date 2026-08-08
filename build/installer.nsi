@@ -1,6 +1,9 @@
 ; ABcode Windows Installer Script (NSIS)
 ; Compile with: makensis -DVERSION="0.4.0" -DROOT=".." installer.nsi
-; 注意：NSIS 相对路径按脚本所在目录(build/)解析，因此统一用 ${ROOT} 绝对路径
+; 注意：
+;  1. NSIS 相对路径按脚本所在目录(build/)解析，因此统一用 ${ROOT} 绝对路径
+;  2. NSIS File 指令的绝对路径必须用反斜杠（X:\...）形式；
+;     正斜杠(/)或混合分隔符会被解析为相对路径导致 "no files found"
 
 !define APP_NAME "ABcode"
 !ifndef VERSION
@@ -23,15 +26,15 @@
 
 ; General settings
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "${ROOT}/dist/ABcode-Setup-${APP_VERSION}.exe"
+OutFile "${ROOT}\dist\ABcode-Setup-${APP_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" ""
 RequestExecutionLevel user
 
 ; Interface settings
-!define MUI_ICON "${ROOT}/build/icon.ico"
-!define MUI_UNICON "${ROOT}/build/icon.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${ROOT}/build/banner.bmp"
+!define MUI_ICON "${ROOT}\build\icon.ico"
+!define MUI_UNICON "${ROOT}\build\icon.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "${ROOT}\build\banner.bmp"
 !define MUI_WELCOMEPAGE_TITLE "欢迎安装 ${APP_NAME}"
 !define MUI_WELCOMEPAGE_TEXT "本向导将引导您安装 ${APP_NAME} ${APP_VERSION}。\n\n点击下一步继续。"
 !define MUI_FINISHPAGE_TITLE "安装完成"
@@ -41,7 +44,7 @@ RequestExecutionLevel user
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${ROOT}/LICENSE"
+!insertmacro MUI_PAGE_LICENSE "${ROOT}\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -57,13 +60,13 @@ RequestExecutionLevel user
 ; Installer sections
 Section "MainSection" SEC_MAIN
     SetOutPath "$INSTDIR"
-    File "${ROOT}/dist/ABcode.exe"
-    File /r "${ROOT}/frontend/*"
-    File /r "${ROOT}/backend/*"
-    File "${ROOT}/build/icon.ico"
+    File "${ROOT}\dist\ABcode.exe"
+    File /r "${ROOT}\frontend\*"
+    File /r "${ROOT}\backend\*"
+    File "${ROOT}\build\icon.ico"
     
     ; Create start script
-    File "${ROOT}/build/start_windows.bat"
+    File "${ROOT}\build\start_windows.bat"
     
     ; Create shortcuts
     CreateDirectory "$SMPROGRAMS\${APP_NAME}"

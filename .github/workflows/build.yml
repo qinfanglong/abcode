@@ -250,9 +250,15 @@ jobs:
           # 运行 NSIS（注意：NSIS 的宏定义参数须为 -DVERSION=...，/DVERSION 会被当作脚本文件名导致失败）
           # ROOT 传仓库绝对路径，避免 NSIS 按脚本所在目录(build/)解析相对路径的问题
           $nsisPath = ".\nsis-3.09\makensis.exe"
-          # ROOT 统一用正斜杠，避免 NSIS File 指令对混合分隔符路径解析失败
-          $rootPath = ($env:GITHUB_WORKSPACE).Replace('\', '/')
+          # ROOT 必须保持反斜杠格式（D:\a\abcode\abcode）：
+          # NSIS File 指令只把 X:\ 形式识别为绝对路径，正斜杠/混合分隔符会报 no files found
+          $rootPath = $env:GITHUB_WORKSPACE
           Write-Host "makensis: $nsisPath  ROOT=$rootPath"
+          # 诊断：确认安装器资源确实存在于仓库根
+          foreach ($f in @("build\banner.bmp", "build\icon.ico", "LICENSE", "dist\ABcode.exe", "build\start_windows.bat")) {
+            Write-Host "check $f => $(Test-Path (Join-Path $rootPath $f))"
+          }
+          Write-Host "banner.bmp size: $((Get-Item (Join-Path $rootPath 'build\banner.bmp') -ErrorAction SilentlyContinue).Length)"
           # 完整捕获 makensis 输出；失败时把末尾诊断写入 ::error:: annotation（可匿名从 run 页/API 读取）
           $output = & $nsisPath "-DVERSION=$version" "-DROOT=$rootPath" build/installer.nsi 2>&1
           $code = $LASTEXITCODE
