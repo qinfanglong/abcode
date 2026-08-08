@@ -151,7 +151,7 @@ jobs:
         run: |
           mkdir -p dist_linux
           tar -czf dist_linux/ABcode-linux-source-${VERSION#v}.tar.gz \
-            backend frontend macapp start.sh start.bat requirements.txt README.md docs CHANGELOG.md LICENSE
+            backend frontend macapp start.sh start.bat README.md docs CHANGELOG.md LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: linux-dist
@@ -240,8 +240,7 @@ jobs:
           
           Write-Host "Creating NSIS installer..."
           
-          # 准备安装器资源
-          Copy-Item dist/ABcode.exe dist/ABcode.exe -Force
+          # 准备安装器资源（ABcode.exe 已在 dist 下，无需自复制）
           Copy-Item build/start_windows.bat dist/ -Force
           Copy-Item build/icon.ico dist/ -Force
           New-Item -ItemType Directory -Force -Path dist/build | Out-Null
@@ -273,7 +272,7 @@ jobs:
         shell: powershell
         run: |
           $version = $env:VERSION.TrimStart('v')
-          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "requirements.txt", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist/ABcode-windows-source-${version}.zip" -Force
+          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist/ABcode-windows-source-${version}.zip" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
