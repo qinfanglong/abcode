@@ -250,7 +250,8 @@ jobs:
           # 运行 NSIS（注意：NSIS 的宏定义参数须为 -DVERSION=...，/DVERSION 会被当作脚本文件名导致失败）
           # ROOT 传仓库绝对路径，避免 NSIS 按脚本所在目录(build/)解析相对路径的问题
           $nsisPath = ".\nsis-3.09\makensis.exe"
-          $rootPath = $env:GITHUB_WORKSPACE
+          # ROOT 统一用正斜杠，避免 NSIS File 指令对混合分隔符路径解析失败
+          $rootPath = ($env:GITHUB_WORKSPACE).Replace('\', '/')
           Write-Host "makensis: $nsisPath  ROOT=$rootPath"
           # 完整捕获 makensis 输出；失败时把末尾诊断写入 ::error:: annotation（可匿名从 run 页/API 读取）
           $output = & $nsisPath "-DVERSION=$version" "-DROOT=$rootPath" build/installer.nsi 2>&1
