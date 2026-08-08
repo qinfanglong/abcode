@@ -3,8 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+// 强制缓存刷新：如果版本不匹配，清除所有缓存并重载
+(function(){var v='20260808f';if(localStorage.getItem('_av')!==v){localStorage.setItem('_av',v);if('caches' in window){caches.keys().then(function(n){n.forEach(function(k){caches.delete(k)})})}location.reload(true);return}window._avv=v})();
+</script>
 <title>ABcode - AI Agent 工具</title>
-<link rel="stylesheet" href="style.css?v=20260808a">
+<link rel="stylesheet" href="style.css?v=20260808f">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f6ef7'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>AB</text></svg>">
 </head>
 <body>
@@ -378,6 +385,7 @@
             <div id="wf-canvas-container" style="flex:1; position:relative; overflow:auto; background:var(--chat-bg);">
               <div id="wf-canvas" style="position:relative; width:4000px; height:4000px;">
                 <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:4000px; height:4000px; pointer-events:none; z-index:2;"></svg>
+                <div id="wf-canvas-nodes" style="position:absolute; top:0; left:0; z-index:3;"></div>
               </div>
             </div>
             <!-- 连线选中浮动条 -->
@@ -388,7 +396,7 @@
             </div>
           </div>
           <!-- 右侧测试面板（百炼风格） -->
-          <div id="wf-test-panel" style="overflow:hidden; border-left:1px solid var(--border); background:#fff; transition:width 0.3s, min-width 0.3s; display:flex; flex-direction:column; width:0; min-width:0;">
+          <div id="wf-test-panel" style="overflow:hidden; border-left:1px solid var(--border); background:#fff; transition:width 0.3s, min-width 0.3s; display:flex; flex-direction:column;">
             <div id="wf-test-panel-inner" style="width:400px; min-width:400px; display:flex; flex-direction:column; height:100%;">
               <!-- 测试面板头部 -->
               <div style="padding:16px 20px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center;">
@@ -1130,6 +1138,6 @@
 <!-- 消息内容渲染器（Markdown 轻量渲染，本地化无外网依赖） -->
 <script src="marked.min.js"></script>
 <script src="highlight.min.js"></script>
-<script src="app.js?v=20260808a"></script>
+<script src="app.js?v=20260808f"></script>
 </body>
 </html>

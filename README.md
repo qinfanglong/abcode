@@ -104,8 +104,8 @@ open http://127.0.0.1:8900          # 会自动打开
 
 ## 🗺 路线图
 
-- [ ] 官方 Docker 镜像
-- [ ] Windows 原生打包（一步步构建纳米 electron/Tauri 壳）
+- [x] 官方 Docker 镜像
+- [x] Windows 原生打包（Nuitka 高混淆单 exe，保护源码）
 - [ ] Linux 原生打包（deb/AppImage）
 - [ ] 多 Agent 协作
 

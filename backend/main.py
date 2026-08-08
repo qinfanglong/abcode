@@ -1793,13 +1793,30 @@ def api_tools():
 
 
 # ================= 前端静态文件 =================
+from fastapi.responses import FileResponse as _FR
+
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    resp = _FR(FRONTEND_DIR / "index.html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+# 自定义静态文件：给所有前端资源加 no-cache
+from starlette.staticfiles import StaticFiles as _SF
+
+class NoCacheStaticFiles(_SF):
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        if not path.endswith(".html"):
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+app.mount("/", NoCacheStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 
 if __name__ == "__main__":

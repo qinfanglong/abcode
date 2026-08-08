@@ -91,9 +91,17 @@ jobs:
           cat AppDir/usr/share/applications/abcode.desktop
           ls -la AppDir/usr/share/applications/
 
-          # 复制图标
-          cp build/icon.ico AppDir/usr/share/icons/hicolor/256x256/apps/abcode.png 2>/dev/null || \
+          # 复制图标（同时放到 usr/share/icons 与 AppDir 根目录，appimagetool 要求根目录有 Icon= 对应文件）
+          if [ -f build/icon.ico ]; then
+            cp build/icon.ico AppDir/usr/share/icons/hicolor/256x256/apps/abcode.png 2>/dev/null || true
+          fi
           cp frontend/abcode_logo.svg AppDir/usr/share/icons/hicolor/256x256/apps/abcode.svg 2>/dev/null || true
+          cp frontend/abcode_logo.svg AppDir/abcode.svg 2>/dev/null || true
+          # 根目录必须存在与 Icon= 同名的图标（appimagetool 检查 $APPDIR/abcode.svg/.png/.xpm）
+          if [ ! -f AppDir/abcode.svg ] && [ ! -f AppDir/abcode.png ]; then
+            echo "::error title=icon::AppDir 根目录缺少 Icon=abcode 图标文件"
+            exit 1
+          fi
 
           # AppRun 入口（printf 写入，避免 heredoc 问题）
           printf '%s\n' \
@@ -103,6 +111,10 @@ jobs:
             'exec "$HERE/usr/bin/ABcode" "$@"' \
             > AppDir/AppRun
           chmod +x AppDir/AppRun AppDir/usr/bin/ABcode
+
+          # appimagetool 只会在 AppDir 根目录（非递归）查找 *.desktop，必须复制一份到根目录
+          cp AppDir/usr/share/applications/abcode.desktop AppDir/abcode.desktop
+          echo "root desktop: $(ls -la AppDir/abcode.desktop)"
           echo "AppDir 就绪: $(find AppDir -type f | wc -l) 个文件"
 
           # 下载 appimagetool（多源重试 + 大小校验）
@@ -158,7 +170,32 @@ jobs:
         run: |
           python -m pip install pyinstaller --quiet
           # 下载便携版 NSIS 3.09（固定路径，避免 choco 安装路径/版本差异）
-          Invoke-WebRequest "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip" -OutFile nsis.zip -UseBasicParsing
+          # 使用 curl.exe（Windows 自带）+ 多镜像重试，Invoke-WebRequest 在 runner 上易失败
+          $mirrors = @(
+            "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip",
+            "https://master.dl.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip?viasf=1",
+            "https://kent.dl.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip?viasf=1"
+          )
+          $downloaded = $false
+          foreach ($url in $mirrors) {
+            Write-Host "尝试下载 NSIS: $url"
+            curl.exe -L --retry 3 --connect-timeout 30 -o nsis.zip $url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path nsis.zip) -and ((Get-Item nsis.zip).Length -gt 1000000)) {
+              $downloaded = $true
+              Write-Host "下载成功: $((Get-Item nsis.zip).Length) bytes"
+              break
+            }
+          }
+          if (-not $downloaded) {
+            Write-Error "NSIS 便携版下载失败（所有镜像均失败）"
+            exit 1
+          }
+          # 校验 ZIP 头（PK..）防止下载到 HTML
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path nsis.zip))[0..1]
+          if (-not ($bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B)) {
+            Write-Error "nsis.zip 不是有效的 ZIP 文件"
+            exit 1
+          }
           Expand-Archive nsis.zip -DestinationPath . -Force
           Get-ChildItem nsis-* | Select-Object Name
           if (-not (Test-Path ".\nsis-3.09\makensis.exe")) {

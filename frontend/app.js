@@ -3216,6 +3216,8 @@ async function openWorkflowEditor(wfId) {
   
   // 重置画布偏移
   wfCanvasPan = { x: 0, y: 0 };
+  autoLayoutNodesIfNeeded();
+  renderNodePanel();   // 确保左侧节点面板渲染（关键修复）
   renderWorkflowCanvas();
   initCanvasPan();
   
@@ -3232,6 +3234,50 @@ async function openWorkflowEditor(wfId) {
   
   // 如果测试面板是打开的，刷新输入字段
   if (testPanelOpen) initTestPanel();
+}
+
+// 自动布局：若节点坐标缺失或全部相同（重叠），则按拓扑顺序横向排列
+function autoLayoutNodesIfNeeded() {
+  if (!currentWorkflow || !currentWorkflow.nodes || !currentWorkflow.nodes.length) return;
+  const nodes = currentWorkflow.nodes;
+  // 判断是否需要布局：坐标缺失或全部重叠
+  const coords = nodes.map(n => (n.x || 0) + '_' + (n.y || 0));
+  const allZeroOrMissing = coords.every(c => c === '0_0');
+  const allSame = new Set(coords).size === 1;
+  if (!allZeroOrMissing && !allSame) return; // 已有有效布局
+  // 依据边构建拓扑顺序
+  const edges = currentWorkflow.edges || [];
+  const order = [];
+  const visited = new Set();
+  const degree = {};
+  nodes.forEach(n => { degree[n.id] = 0; });
+  edges.forEach(e => {
+    const to = e.target ?? e.to;
+    if (to && degree.hasOwnProperty(to)) degree[to]++;
+  });
+  let queue = nodes.filter(n => degree[n.id] === 0).map(n => n.id);
+  while (queue.length) {
+    const id = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    order.push(id);
+    edges.forEach(e => {
+      if (e.source === id && !visited.has(e.target)) {
+        degree[e.target]--;
+        if (degree[e.target] <= 0) queue.push(e.target);
+      }
+    });
+  }
+  // 剩下的按原顺序补充
+  nodes.forEach(n => { if (!visited.has(n.id)) order.push(n.id); });
+  // 分配坐标：每列最多 4 个
+  const colWidth = 260, rowHeight = 150, perCol = 4;
+  order.forEach((id, i) => {
+    const col = Math.floor(i / perCol);
+    const row = i % perCol;
+    const node = nodes.find(n => n.id === id);
+    if (node) { node.x = 100 + col * colWidth; node.y = 120 + row * rowHeight; }
+  });
 }
 
 // 切换视图
@@ -3366,10 +3412,13 @@ function rerunWorkflowExec(wfId) {
 // 渲染工作流画布
 function renderWorkflowCanvas() {
   const canvas = $("#wf-canvas");
+  const nodesEl = $("#wf-canvas-nodes");
   const edgesSvg = $("#wf-canvas-edges");
   const container = $("#wf-canvas-container");
+  if (!canvas || !edgesSvg) { console.warn("画布元素未找到，跳过渲染"); return; }
   
-  canvas.innerHTML = "";
+  // 只清空节点容器，保留 SVG（SVG 是画布的子元素，清空 canvas 会误删）
+  if (nodesEl) nodesEl.innerHTML = "";
   edgesSvg.innerHTML = "";
   
   if (!currentWorkflow) return;
@@ -3538,7 +3587,7 @@ function renderWorkflowCanvas() {
       document.addEventListener("mouseup", onUp);
     });
     
-    canvas.appendChild(el);
+    if (nodesEl) nodesEl.appendChild(el); else canvas.appendChild(el);
   });
   
   // 渲染连线
@@ -3589,6 +3638,7 @@ let selectedEdgeIdx = -1;
 
 function renderEdges() {
   const svg = $("#wf-canvas-edges");
+  if (!svg) return;
   const tmpLine = svg.querySelector("#wf-temp-line");
   const defs = svg.querySelector("defs");
   svg.innerHTML = "";
@@ -3604,15 +3654,21 @@ function renderEdges() {
     svg.appendChild(defs);
   }
   
-  currentWorkflow.edges.forEach((edge, idx) => {
+  currentWorkflow.edges.forEach((rawEdge, idx) => {
+    // 兼容旧数据：from/to ↔ source/target
+    const edge = {
+      source: rawEdge.source ?? rawEdge.from,
+      target: rawEdge.target ?? rawEdge.to,
+      sourceHandle: rawEdge.sourceHandle, targetHandle: rawEdge.targetHandle,
+    };
     const sourceNode = currentWorkflow.nodes.find(n => n.id === edge.source);
     const targetNode = currentWorkflow.nodes.find(n => n.id === edge.target);
     if (!sourceNode || !targetNode) return;
     
-    const x1 = sourceNode.x + 180;
-    const y1 = sourceNode.y + 28;
-    const x2 = targetNode.x;
-    const y2 = targetNode.y + 28;
+    const x1 = (sourceNode.x || 0) + 180;
+    const y1 = (sourceNode.y || 0) + 28;
+    const x2 = (targetNode.x || 0);
+    const y2 = (targetNode.y || 0) + 28;
     
     const dx = Math.abs(x2 - x1);
     const cp = Math.max(60, dx * 0.4);
@@ -4499,6 +4555,14 @@ async function saveCurrentWorkflow() {
   
   // 确保骨干连线
   ensureBackboneEdge();
+  
+  // 边字段归一化：统一为 source/target，兼容旧 from/to
+  currentWorkflow.edges = (currentWorkflow.edges || []).map(e => ({
+    source: e.source ?? e.from,
+    target: e.target ?? e.to,
+    ...(e.sourceHandle ? { sourceHandle: e.sourceHandle } : {}),
+    ...(e.targetHandle ? { targetHandle: e.targetHandle } : {}),
+  })).filter(e => e.source && e.target);
   
   // 验证：必须有 start 和 end 节点
   const hasStart = currentWorkflow.nodes.some(n => n.type === "start");
