@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+// 强制缓存刷新：如果版本不匹配，清除所有缓存并重载
+(function(){var v='20260811c';if(localStorage.getItem('_av')!==v){localStorage.setItem('_av',v);if('caches' in window){caches.keys().then(function(n){n.forEach(function(k){caches.delete(k)})})}location.reload(true);return}window._avv=v})();
+</script>
+<title>ABcode - AI Agent 工具</title>
+<link rel="stylesheet" href="style.css?v=20260812a">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f6ef7'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>AB</text></svg>">
+</head>
+<body>
+<!-- 更新通知横幅 -->
+<div id="update-banner" style="display:none; position: fixed; top: 0; left: 0; right: 0; z-index: 200; background: linear-gradient(135deg, #4f6ef7 0%, #3d5af1 100%); color: white; padding: 10px 20px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+  <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;">
+    <div>
+      <span id="banner-text">🔄 检查更新中...</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button id="banner-update-btn" onclick="showUpdateDialog()" style="display:none; padding: 4px 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 12px;">
+        查看更新
+      </button>
+      <button onclick="dismissBanner()" style="padding: 4px 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.2); color: white; cursor: pointer; font-size: 12px;">
+        稍后提醒
+      </button>
+    </div>
+  </div>
+</div>
+<div id="app">
+  <!-- 左侧边栏 -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-logo-wrap">
+        <button id="thinking-toggle" class="brand-logo thinking-logo" title="思考模式：开启 / 关闭">?</button>
+      </div>
+      <div class="brand-text">
+        <h1>ABcode</h1>
+        <span>AI Agent Studio</span>
+      </div>
+    </div>
+    <button id="new-chat-btn" class="btn-new-chat">＋ 新建会话</button>
+    <button id="sidebar-toggle" class="btn-sidebar-toggle" title="折叠 / 展开侧边栏（推入 / 推出）">«</button>
+    <div id="conv-list" class="conv-list"></div>
+    <div class="sidebar-footer">
+      <button id="agent-btn" class="btn-sidebar">🤖 智能体</button>
+      <button id="team-btn" class="btn-sidebar">👥 团队协作</button>
+      <button id="workflow-btn" class="btn-sidebar">⚡ 工作流</button>
+      <button id="tools-btn" class="btn-sidebar">🧩 技能 / MCP / 连接器</button>
+      <button id="kb-btn" class="btn-sidebar">📚 知识库</button>
+      <button id="cron-btn" class="btn-sidebar">⏰ 定时任务</button>
+      <button id="channel-btn" class="btn-sidebar">📡 频道管理</button>
+      <button id="settings-btn" class="btn-sidebar">⚙ 设置</button>
+    </div>
+  </aside>
+
+  <!-- 移动端侧边栏遮罩 -->
+  <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+
+  <!-- 主区域 -->
+  <main id="main">
+    <header id="topbar">
+      <button id="mobile-menu-btn" class="mobile-menu-btn" onclick="openMobileSidebar()" title="菜单">☰</button>
+      <div id="conv-title">新对话</div>
+      <div class="topbar-right">
+        <div class="model-type-toggle" id="model-type-toggle">
+          <button class="model-type-btn active" data-type="all" title="全部模型">🌐 全部</button>
+          <button class="model-type-btn" data-type="local" title="本地模型 (Ollama)">🏠 本地</button>
+          <button class="model-type-btn" data-type="network" title="网络模型">☁️ 网络</button>
+        </div>
+        <select id="provider-select" title="选择供应商"></select>
+        <select id="model-select" title="选择模型"></select>
+      </div>
+    </header>
+
+    <div id="chat-area">
+      <div id="welcome" class="welcome">
+        <div class="welcome-logo" style="max-width:120px;max-height:120px;"><svg viewBox="0 0 512 512" style="width:100%;height:100%;overflow:hidden"><defs><linearGradient id="wb1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="40%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs><path d="M130,420 Q130,410 140,398 L256,68 Q262,55 268,68 L384,398 Q394,410 394,420" fill="none" stroke="url(#wb1)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/><line x1="170" y1="310" x2="354" y2="310" stroke="url(#wb1)" stroke-width="32" stroke-linecap="round"/><line x1="420" y1="75" x2="420" y2="420" stroke="url(#wb1)" stroke-width="56" stroke-linecap="round"/><path d="M420,75 L468,75 Q540,75 540,150 Q540,228 468,228 L420,228" fill="none" stroke="url(#wb1)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><path d="M420,228 L478,228 Q555,228 555,322 Q555,420 478,420 L420,420" fill="none" stroke="url(#wb1)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><line x1="100" y1="455" x2="580" y2="455" stroke="url(#wb1)" stroke-width="3" stroke-linecap="round" opacity="0.3"/><text x="340" y="500" text-anchor="middle" font-family="'SF Mono','Fira Code',Consolas,monospace" font-size="58" font-weight="400" fill="url(#wb1)" letter-spacing="14" opacity="0.65">code</text><circle cx="95" cy="65" r="6" fill="#7c3aed" opacity="0.45"/><circle cx="118" cy="65" r="6" fill="#3b82f6" opacity="0.45"/><circle cx="141" cy="65" r="6" fill="#06b6d4" opacity="0.45"/></svg></div>
+        <h2>你好，我是 ABcode</h2>
+        <p>你的 AI Agent 工具 · 支持 DeepSeek / OpenAI / 通义 / Ollama 本地模型</p>
+        <div class="welcome-tips">
+          <div class="tip">💬 多会话管理</div>
+          <div class="tip">⚡ 流式输出</div>
+          <div class="tip">🔌 多模型接入</div>
+          <div class="tip">🛠 Agent 工具调用</div>
+          <div class="tip">📚 知识库 RAG</div>
+          <div class="tip">⏰ 定时任务</div>
+        </div>
+      </div>
+      <div id="messages"></div>
+      <div id="read-more-bar" class="read-more-bar" style="display:none" onclick="jumpToLatest()" title="继续阅读到当前生成位置">
+        <span class="rmb-dot"></span>
+        <span id="rmb-text">⬇ 继续阅读</span>
+      </div>
+    </div>
+
+    <footer id="input-bar">
+      <div id="attach-preview" class="attach-preview"></div>
+      <div class="streaming-indicator" id="streaming-indicator">
+        <div class="dot-pulse"><span></span><span></span><span></span></div>
+        <span id="streaming-text">正在思考...</span>
+      </div>
+      <div id="send-queue" class="send-queue" style="display:none"></div>
+      <div class="input-row">
+        <textarea id="chat-input" placeholder="" rows="1"></textarea>
+      </div>
+      <div class="input-bottom">
+        <div class="input-bottom-left">
+          <button id="convtools-btn" class="icon-btn" title="本会话工具配置">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </button>
+          <button id="voice-btn" class="icon-btn" title="语音输入（按住说话）">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          </button>
+          <button id="speak-toggle-btn" class="icon-btn speak-on" title="流式朗读回复（点按开关）">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+          </button>
+          <button id="attach-btn" class="icon-btn" title="上传图片/视频/文件">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          </button>
+          <button id="emoji-btn" class="icon-btn" title="表情">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+          </button>
+          <div id="emoji-popup" class="emoji-popup" style="display:none">
+            <div class="emoji-popup-header">表情</div>
+            <div class="emoji-grid" id="emoji-grid"></div>
+          </div>
+          <button id="mode-selector-btn" class="mode-selector-btn">
+            <span id="mode-label">默认</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4L5 7L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="input-bottom-right">
+          <button id="compress-btn" class="icon-btn" title="压缩当前会话（将长历史总结为摘要）">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+          </button>
+          <span id="char-count" class="char-count">0/10000</span>
+          <button id="close-mode-btn" class="close-mode-btn" onclick="toggleCloseMode()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span>关闭模式</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4L5 7L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="send-btn" title="发送">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+          <button id="stop-btn" title="停止生成" style="display:none">■</button>
+        </div>
+        <input type="file" id="file-input" accept="image/*,video/*,audio/*,.txt,.md,.pdf,.json,.csv" style="display:none" multiple>
+      </div>
+      <!-- Loop 模式选择面板 -->
+      <div id="mode-popup" class="mode-popup" style="display:none">
+        <div class="mode-popup-header">
+          <div>
+            <div class="mode-popup-title">Loop 模式</div>
+            <div class="mode-popup-desc">选择智能体接下来的工作方式</div>
+          </div>
+          <button class="mode-popup-close" onclick="closeModePopup()">✕</button>
+        </div>
+        <div class="mode-popup-section">
+          <div class="mode-popup-section-title">内置</div>
+          <div class="mode-option" data-mode="default" onclick="selectMode('default')">
+            <div class="mode-option-icon">🎯</div>
+            <div class="mode-option-content">
+              <div class="mode-option-name">默认</div>
+              <div class="mode-option-desc">标准的受控智能体 Loop。</div>
+            </div>
+            <div class="mode-option-check" id="mode-check-default">✓</div>
+          </div>
+          <div class="mode-option" data-mode="goal" onclick="selectMode('goal')">
+            <div class="mode-option-icon">🔭</div>
+            <div class="mode-option-content">
+              <div class="mode-option-name">目标</div>
+              <div class="mode-option-desc">持续推进一个具体且可验证的目标。</div>
+            </div>
+            <div class="mode-option-check" id="mode-check-goal"></div>
+          </div>
+          <div class="mode-option" data-mode="task" onclick="selectMode('task')">
+            <div class="mode-option-icon">⚡</div>
+            <div class="mode-option-content">
+              <div class="mode-option-name">任务</div>
+              <div class="mode-option-desc">运行结构化、可持续的多步骤任务。</div>
+            </div>
+            <div class="mode-option-check" id="mode-check-task"></div>
+          </div>
+        </div>
+      </div>
+      <!-- 关闭模式选择面板 -->
+      <div id="close-mode-popup" class="mode-popup" style="display:none">
+        <div class="mode-popup-header">
+          <div>
+            <div class="mode-popup-title" id="close-mode-title">关闭模式</div>
+            <div class="mode-popup-desc" id="close-mode-desc">关闭所有工具审批，所有工具自动执行</div>
+          </div>
+          <button class="mode-popup-close" onclick="closeCloseModePopup()">✕</button>
+        </div>
+        <div class="mode-popup-section">
+          <div class="close-mode-option" data-close-mode="strict" onclick="selectCloseMode('strict')">
+            <div class="close-mode-option-icon">⛔</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">严格模式</div>
+              <div class="close-mode-option-desc">所有工具调用都需要审批，最高安全级别</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-strict"></div>
+          </div>
+          <div class="close-mode-option" data-close-mode="smart" onclick="selectCloseMode('smart')">
+            <div class="close-mode-option-icon">⚠️</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">智能模式</div>
+              <div class="close-mode-option-desc">低风险工具自动放行，中高风险工具需要审批</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-smart"></div>
+          </div>
+          <div class="close-mode-option" data-close-mode="auto" onclick="selectCloseMode('auto')">
+            <div class="close-mode-option-icon">🔵</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">自动模式</div>
+              <div class="close-mode-option-desc">仅被明确标记为需要审批的工具才会要求审批（默认）</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-auto"></div>
+          </div>
+          <div class="close-mode-option active" data-close-mode="off" onclick="selectCloseMode('off')">
+            <div class="close-mode-option-icon">✅</div>
+            <div class="close-mode-option-content">
+              <div class="close-mode-option-name">关闭模式</div>
+              <div class="close-mode-option-desc">关闭所有工具审批，所有工具自动执行</div>
+            </div>
+            <div class="close-mode-option-check" id="close-mode-check-off">✓</div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<!-- 团队协作弹窗 -->
+<div id="team-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:700px">
+    <div class="modal-header">
+      <h2>👥 团队协作</h2>
+      <button class="modal-close" onclick="closeModal('team-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="team-tabs">
+        <button class="team-tab active" data-tab="members">成员管理</button>
+        <button class="team-tab" data-tab="shared">共享对话</button>
+        <button class="team-tab" data-tab="activity">活动日志</button>
+      </div>
+      <div id="team-tab-content">
+        <div id="team-members-tab" class="team-tab-panel active">
+          <div class="team-header">
+            <h3>团队成员</h3>
+            <button class="btn-add" onclick="showAddMemberForm()">＋ 添加成员</button>
+          </div>
+          <div id="add-member-form" class="add-form" style="display:none">
+            <input id="member-name" placeholder="姓名">
+            <input id="member-email" placeholder="邮箱">
+            <select id="member-role">
+              <option value="admin">管理员</option>
+              <option value="member" selected>成员</option>
+              <option value="viewer">观察者</option>
+            </select>
+            <button class="btn-save" onclick="saveMember()">保存</button>
+            <button class="btn-cancel" onclick="hideAddMemberForm()">取消</button>
+          </div>
+          <div id="team-members-list" class="team-list"></div>
+        </div>
+        <div id="team-shared-tab" class="team-tab-panel" style="display:none">
+          <div id="team-shared-list" class="team-list"></div>
+        </div>
+        <div id="team-activity-tab" class="team-tab-panel" style="display:none">
+          <div id="team-activity-list" class="team-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 智能体弹窗 -->
+<div id="agent-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:960px; max-width:95vw; max-height:90vh;">
+    <div class="modal-header">
+      <h2>🤖 智能体</h2>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-test" onclick="openMultiAgentModal()">🤝 多Agent协作</button>
+        <button class="modal-close" onclick="closeModal('agent-modal')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:0; display:flex; max-height:calc(90vh - 60px); overflow:hidden;">
+      <!-- 左侧列表 -->
+      <div style="width:300px; min-width:300px; border-right:1px solid var(--border); display:flex; flex-direction:column;">
+        <div style="padding:12px 16px; border-bottom:1px solid var(--border);">
+          <div style="display:flex; gap:6px;" id="agent-source-tabs">
+            <button class="agent-source-tab" data-source="builtin">🏠 内置</button>
+            <button class="agent-source-tab active" data-source="created">🛠 创建</button>
+          </div>
+        </div>
+        <div style="padding:10px 16px; border-bottom:1px solid var(--border);">
+          <button id="agent-create-btn" class="btn-save" onclick="openAgentForm(null)" style="width:100%;">＋ 新建智能体</button>
+        </div>
+        <div id="agent-list" style="flex:1; overflow-y:auto; padding:8px;"></div>
+        <div id="agent-pagination" style="display:none; padding:8px 12px; border-top:1px solid var(--border); justify-content:center; align-items:center; gap:10px;">
+          <button class="agent-page-btn" onclick="agentPage(-1)" title="上一页">‹</button>
+          <span id="agent-page-info" style="font-size:12px; color:var(--text-secondary);"></span>
+          <button class="agent-page-btn" onclick="agentPage(1)" title="下一页">›</button>
+        </div>
+      </div>
+      <!-- 右侧详情/编辑 -->
+      <div id="agent-detail-panel" style="flex:1; overflow-y:auto; padding:20px; background:var(--card-bg);">
+        <div style="text-align:center; color:var(--text-muted); margin-top:80px;">
+          <div style="font-size:48px;">🤖</div>
+          <p style="margin-top:12px;">选择左侧智能体查看详情，或新建一个智能体</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 多Agent协作弹窗 -->
+<div id="multi-agent-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:900px; max-width:95vw; max-height:92vh;">
+    <div class="modal-header">
+      <h2>🤝 多Agent协作</h2>
+      <button class="modal-close" onclick="closeMultiAgentModal()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:calc(92vh - 60px); overflow-y:auto; padding:20px;">
+      <!-- 配置区 -->
+      <div id="ma-config" style="display:flex; flex-direction:column; gap:14px;">
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:280px;">
+            <div class="ma-label">主 Agent（编排者）</div>
+            <select id="ma-main" class="ma-select">
+              <option value="">加载中…</option>
+            </select>
+            <div class="ma-hint">决定协作基调，其模型偏好用于汇总/路由</div>
+          </div>
+          <div style="flex:1; min-width:280px;">
+            <div class="ma-label">协作模式</div>
+            <select id="ma-mode" class="ma-select">
+              <option value="planner_executor">🧭 Planner/Executor（规划→执行→汇总）</option>
+              <option value="parallel">⚡ 并行（子Agent同时执行）</option>
+              <option value="sequential">➡️ 顺序（子Agent依次执行）</option>
+              <option value="router">🔀 路由（主Agent智能分派）</option>
+              <optgroup label="🐝 蜂群模式（agno 引擎）">
+                <option value="swarm_manager">🐝 蜂群·经理拆解（Manager 拆任务→并行执行→汇总）</option>
+                <option value="swarm_parallel">🐝 蜂群·全并行（所有成员同时处理同一任务）</option>
+                <option value="swarm_pipeline">🐝 蜂群·流水线（前序输出作为后序输入）</option>
+                <option value="swarm_debate">🐝 蜂群·辩论（多视角独立作答→综合评审）</option>
+              </optgroup>
+            </select>
+            <div class="ma-hint">蜂群模式基于 agno 轻量引擎，并行执行速度更快；临时覆盖主 Agent 预设的协作模式</div>
+          </div>
+        </div>
+        <div>
+          <div class="ma-label">子 Agent（执行者）</div>
+          <div id="ma-sub-list" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; max-height:220px; overflow-y:auto; padding:4px;">
+            <div style="color:var(--text-muted); font-size:13px;">加载中…</div>
+          </div>
+        </div>
+        <div>
+          <div class="ma-label">任务描述</div>
+          <textarea id="ma-task" rows="3" style="width:100%; box-sizing:border-box; resize:vertical;" placeholder="例如：帮我策划一款社区团购 App 的完整方案，包括市场分析、功能设计、技术选型和推广策略"></textarea>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button id="ma-run-btn" class="btn-save" onclick="runMultiAgent()" style="padding:10px 22px;">🚀 执行协作</button>
+          <span id="ma-status" style="font-size:13px; color:var(--text-muted);"></span>
+        </div>
+      </div>
+      <!-- 结果区 -->
+      <div id="ma-result" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;">
+        <div id="ma-result-head" style="display:flex; align-items:center; gap:10px; margin-bottom:12px;"></div>
+        <div id="ma-result-body" style="display:flex; flex-direction:column; gap:12px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 专家套件弹窗 -->
+<!-- 智能体测试弹窗 -->
+<div id="agent-test-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:560px; max-width:92vw;">
+    <div class="modal-header">
+      <h2>▶ 运行测试</h2>
+      <button class="modal-close" onclick="closeAgentTestModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="agent-test-model-info" style="font-size:12px; color:var(--text-secondary); background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin-bottom:12px;"></div>
+      <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">测试任务</label>
+      <textarea id="agent-test-input" rows="5" style="width:100%; margin-top:6px; box-sizing:border-box;" class="ncf-input" placeholder="输入要测试的任务..."></textarea>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="closeAgentTestModal()">取消</button>
+      <button class="btn-save" onclick="confirmAgentTest()">▶ 开始测试</button>
+    </div>
+  </div>
+</div>
+
+<!-- 工作流弹窗 -->
+<div id="workflow-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:1100px; max-width:95vw;">
+    <div class="modal-header">
+      <h2>⚡ 工作流</h2>
+      <button class="modal-close" onclick="closeModal('workflow-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <!-- 工作流列表视图 -->
+      <div id="wf-list-view">
+        <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; gap:8px;">
+            <button class="btn-save" onclick="createNewWorkflow()">＋ 新建工作流</button>
+            <button class="btn-test" onclick="showWfTemplates()">📋 模板库</button>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="wf-view-btn active" data-view="list" onclick="switchWfView('list')">列表</button>
+            <button class="wf-view-btn" data-view="executions" onclick="switchWfView('executions')">执行记录</button>
+            <button class="wf-view-btn" onclick="loadWorkflowExecutions()">🔄</button>
+          </div>
+        </div>
+        <div id="wf-list-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
+          <!-- 动态填充 -->
+        </div>
+      </div>
+      
+      <!-- 工作流编辑器视图 -->
+      <div id="wf-editor-view" style="display:none;">
+        <div style="padding:10px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--input-bg);">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button class="btn-test" onclick="switchWfView('list')" style="padding:4px 10px; font-size:12px;">← 返回</button>
+            <input id="wf-name-input" placeholder="工作流名称" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-weight:600; width:200px;">
+            <input id="wf-desc-input" placeholder="描述（可选）" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; width:250px;">
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-test" onclick="saveCurrentWorkflow()">💾 保存</button>
+            <button class="btn-save" id="wf-test-toggle-btn" onclick="toggleTestPanel()">▶ 测试</button>
+          </div>
+        </div>
+        <!-- 编辑器主体：左侧节点面板 + 画布 + 右侧测试面板 -->
+        <div style="display:flex; height:calc(100vh - 130px); overflow:hidden;">
+          <!-- 左侧节点面板 -->
+          <div id="wf-node-panel" style="width:220px; min-width:220px; border-right:1px solid var(--border); background:var(--input-bg); overflow-y:auto; padding:8px 0;">
+            <div id="wf-node-categories"></div>
+          </div>
+          <!-- 中间画布 -->
+          <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+            <div id="wf-canvas-container" style="flex:1; position:relative; overflow:auto; background:var(--chat-bg);">
+              <div id="wf-canvas" style="position:relative; width:4000px; height:4000px;">
+                <svg id="wf-canvas-edges" style="position:absolute; top:0; left:0; width:4000px; height:4000px; pointer-events:none; z-index:2;"></svg>
+                <div id="wf-canvas-nodes" style="position:absolute; top:0; left:0; z-index:3;"></div>
+              </div>
+            </div>
+            <!-- 连线删除按钮由JS动态生成（.wf-edge-delete-btn） -->
+          </div>
+          <!-- 右侧测试面板（百炼风格） -->
+          <div id="wf-test-panel" style="overflow:hidden; border-left:1px solid var(--border); background:#fff; transition:width 0.3s, min-width 0.3s; display:flex; flex-direction:column;">
+            <div id="wf-test-panel-inner" style="width:100%; min-width:0; display:flex; flex-direction:column; height:100%; overflow:hidden;">
+              <!-- 测试面板头部 -->
+              <div style="padding:16px 20px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-weight:600; font-size:15px; color:#1f2937;">测试</span>
+                </div>
+                <button onclick="toggleTestPanel()" style="width:28px; height:28px; border:none; border-radius:6px; background:transparent; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px;">✕</button>
+              </div>
+              <!-- 测试面板工具栏 -->
+              <div style="padding:8px 20px; display:flex; justify-content:flex-end; gap:4px; border-bottom:1px solid #f0f0f0;">
+                <button onclick="openWfInputConfig()" class="wf-test-tool-btn" title="入参参数配置">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+                <button onclick="openWfExpConfig()" class="wf-test-tool-btn" title="体验配置">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                </button>
+                <button onclick="showWfTestHistory()" class="wf-test-tool-btn" title="测试历史">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </button>
+                <button onclick="clearWfTestHistory()" class="wf-test-tool-btn" title="清空记录">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+              </div>
+              <!-- 测试对话区域 -->
+              <div id="wf-test-chat" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:stretch; padding:12px 16px;">
+                <!-- 空状态 -->
+                <div id="wf-test-empty" style="text-align:center; padding:40px 16px;">
+                  <div class="wf-test-empty-inner">
+                    <div style="width:80px; height:80px; margin:0 auto 16px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius:20px; display:flex; align-items:center; justify-content:center;">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                    </div>
+                    <div style="font-size:16px; font-weight:600; color:#374151; margin-bottom:8px;" id="wf-test-wf-name">工作流名称</div>
+                    <div style="font-size:14px; color:#6b7280;">输入问题进行测试体验</div>
+                  </div>
+                </div>
+                <!-- 对话消息区 -->
+                <div id="wf-test-messages" style="width:100%; max-width:100%; display:block;"></div>
+              </div>
+              <!-- 输入区域 -->
+              <div style="padding:8px 12px 10px; border-top:1px solid #f0f0f0; background:white; position:relative; z-index:20; flex-shrink:0;">
+                <div style="display:flex; align-items:flex-end; gap:6px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:6px 10px;">
+                  <button onclick="$('#wf-test-file-input').click()" style="width:28px; height:28px; border:none; border-radius:8px; background:transparent; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                  </button>
+                  <textarea id="wf-test-input" rows="1" placeholder="输入问题进行测试体验" style="flex:1; border:none; background:transparent; resize:none; font-size:13px; line-height:1.4; max-height:80px; min-height:22px; outline:none; font-family:inherit; color:#1f2937;"></textarea>
+                  <button id="wf-test-stop-btn" onclick="stopWfTest()" style="display:none; width:32px; height:32px; border:none; border-radius:8px; background:#f97316; color:white; cursor:pointer; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s;" title="停止测试">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                  </button>
+                  <button id="wf-test-send-btn" onclick="executeWfTestFromInput()" style="width:32px; height:32px; border:none; border-radius:8px; background:#e5e7eb; color:#9ca3af; cursor:not-allowed; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                  </button>
+                </div>
+                <input type="file" id="wf-test-file-input" multiple style="display:none" onchange="handleWfTestFiles(this.files)">
+                <div id="wf-test-file-list" style="margin-top:4px; display:flex; flex-wrap:wrap; gap:4px;"></div>
+                <div style="margin-top:8px; font-size:11px; color:#9ca3af; text-align:center;">内容由AI生成，仅供参考</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="node-config-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:680px; max-height:85vh;">
+    <div class="modal-header">
+      <h2 id="ncf-title">节点配置</h2>
+      <button class="modal-close" onclick="closeNodeConfigModal()">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto; max-height:calc(85vh - 120px);">
+      <div class="ncf-section">
+        <div class="ncf-row" style="display:flex; gap:12px;">
+          <div style="flex:1"><label class="ncf-label">节点 ID</label><input id="ncf-id" class="ncf-input" onchange="updateNodeField('id', this.value)"></div>
+          <div style="flex:1"><label class="ncf-label">显示名称</label><input id="ncf-label" class="ncf-input" onchange="updateNodeField('label', this.value)"></div>
+        </div>
+      </div>
+      <div id="ncf-type-config"></div>
+      <div class="ncf-section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <label class="ncf-label">可用变量（点击插入）</label>
+        <div id="ncf-var-chips" class="ncf-var-chips"></div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:space-between; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="deleteSelectedNode()" style="color:#ef4444; border-color:#fecaca;">🗑 删除节点</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-test" onclick="closeNodeConfigModal()">取消</button>
+        <button class="btn-save" onclick="closeNodeConfigModal()">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 请求观测弹窗 -->
+<div id="wf-obs-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:800px; max-width:95vw; max-height:85vh;">
+    <div class="modal-header">
+      <h2 id="wf-obs-title">👁 请求观测</h2>
+      <button class="modal-close" onclick="closeModal('wf-obs-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="wf-obs-content" style="max-height:calc(85vh - 100px); overflow-y:auto;">
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--border);">
+      <button class="btn-test" onclick="closeModal('wf-obs-modal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 模板库视图 -->
+<div id="wf-templates-view" style="display:none;">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+    <div style="display:flex; gap:8px;">
+      <button class="btn-test" onclick="switchWfView('list')">← 返回</button>
+    </div>
+    <div class="wf-template-tabs">
+      <button class="wf-tab active" data-cat="all" onclick="filterWfTemplates('all')">全部</button>
+      <button class="wf-tab" data-cat="basic" onclick="filterWfTemplates('basic')">基础</button>
+      <button class="wf-tab" data-cat="advanced" onclick="filterWfTemplates('advanced')">高级</button>
+      <button class="wf-tab" data-cat="coding" onclick="filterWfTemplates('coding')">编程</button>
+      <button class="wf-tab" data-cat="writing" onclick="filterWfTemplates('writing')">写作</button>
+    </div>
+  </div>
+  <div id="wf-templates-content" style="padding:16px 20px; max-height:60vh; overflow-y:auto;">
+    <!-- 动态填充 -->
+  </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div id="settings-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>⚙ 设置</h2>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- 个人偏好设置 -->
+      <div class="settings-section preference-section">
+        <h3>👤 个人偏好设置</h3>
+        <p class="hint">管理你的个性化配置，所有偏好自动保存到本地</p>
+
+        <div class="pref-group">
+          <h4>🎨 主题风格</h4>
+          <div class="theme-picker">
+            <button class="theme-pick-btn" data-theme="minimal" title="极简灰">
+              <span class="theme-preview minimal-preview"></span>
+              <span>极简灰</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="ocean" title="海洋蓝">
+              <span class="theme-preview ocean-preview"></span>
+              <span>海洋蓝</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="wave" title="海浪动效">
+              <span class="theme-preview wave-preview"></span>
+              <span>海浪动效</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="light" title="亮色主题">
+              <span class="theme-preview light-preview"></span>
+              <span>亮色</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="dark" title="暗色主题">
+              <span class="theme-preview dark-preview"></span>
+              <span>暗色</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="oled" title="OLED极夜">
+              <span class="theme-preview oled-preview"></span>
+              <span>OLED极夜</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="sepia" title="护眼主题">
+              <span class="theme-preview sepia-preview"></span>
+              <span>护眼</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="forest" title="森林绿">
+              <span class="theme-preview forest-preview"></span>
+              <span>森林绿</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="cartoon" title="卡通风景">
+              <span class="theme-preview cartoon-preview"></span>
+              <span>卡通风景</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="particles" title="粒子星空">
+              <span class="theme-preview particles-preview"></span>
+              <span>粒子星空</span>
+            </button>
+            <button class="theme-pick-btn" data-theme="particles-light" title="淡雅粒子">
+              <span class="theme-preview particles-light-preview"></span>
+              <span>淡雅粒子</span>
+            </button>
+          </div>
+          <div class="pref-row" style="margin-top:8px">
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="particle-animate-toggle" checked> 动效动画（关闭则显示静态背景）
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref-group">
+          <h4>📝 对话外观</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label>字体</label>
+              <select id="font-family-select">
+                <option value='"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif'>苹方 / 微软雅黑</option>
+                <option value='"SF Pro Text", "Helvetica Neue", sans-serif'>SF Pro</option>
+                <option value='"Noto Sans SC", sans-serif'>Noto Sans</option>
+                <option value='"Source Han Sans", sans-serif'>思源黑体</option>
+                <option value='"Microsoft YaHei", sans-serif'>微软雅黑</option>
+                <option value='"Hiragino Sans GB", sans-serif'>冬青黑体</option>
+                <option value='system-ui, sans-serif'>系统默认</option>
+                <option value='serif'>宋体 / 衬线体</option>
+              </select>
+            </div>
+            <div class="pref-item">
+              <label>字号</label>
+              <div class="font-size-control">
+                <button class="font-size-btn" onclick="adjustFontSize(-1)">A-</button>
+                <span id="font-size-display" class="font-size-value">15</span>
+                <button class="font-size-btn" onclick="adjustFontSize(1)">A+</button>
+              </div>
+            </div>
+            <div class="pref-item">
+              <label>行高</label>
+              <select id="line-height-select">
+                <option value="1.5">紧凑</option>
+                <option value="1.7" selected>标准</option>
+                <option value="2.0">宽松</option>
+                <option value="2.4">超宽松</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref-group">
+          <h4>💡 智能辅助</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="suggestion-toggle" checked> 提示词建议
+              </label>
+              <span class="pref-desc">对话完成后自动生成 1-3 个提示词建议</span>
+            </div>
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="agent-switch-pref" checked> Agent 模式
+              </label>
+              <span class="pref-desc">启用 Agent 自主决策和工具调用能力</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref-group">
+          <h4>🌐 语言与区域</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label>界面语言</label>
+              <select id="lang-select">
+                <option value="zh-CN" selected>简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div class="pref-item">
+              <label>时区</label>
+              <select id="tz-select">
+                <option value="Asia/Shanghai" selected>Asia/Shanghai (UTC+8)</option>
+                <option value="America/New_York">America/New_York (UTC-5)</option>
+                <option value="Europe/London">Europe/London (UTC+0)</option>
+                <option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </div>
+          </div>
+          <div id="settings-lang-hint" style="display:none; font-size:11px; color:var(--primary); margin-top:6px;"></div>
+          <div id="settings-tz-hint" style="display:none; font-size:11px; color:var(--primary); margin-top:6px;"></div>
+        </div>
+
+        <div class="pref-actions">
+          <button class="btn-reset-pref" onclick="resetPreferences()">恢复默认设置</button>
+          <button class="btn-export-pref" onclick="exportPreferences()">导出配置</button>
+        </div>
+      </div>
+
+      <!-- 会话配置：智能体 + 工作流 -->
+      <div class="settings-section">
+        <h3>💬 会话绑定</h3>
+        <p class="hint">为会话选择默认智能体与工作流。保存后，新建会话会自动套用；也可一键应用到当前会话。</p>
+        <div class="pref-row" style="margin-bottom:10px">
+          <div class="pref-item" style="flex:1">
+            <label>默认智能体</label>
+            <select id="session-agent-select" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none; background:var(--input-bg); color:var(--text);">
+              <option value="">不绑定（默认对话）</option>
+            </select>
+            <span class="pref-desc">会话将使用该智能体的系统提示词与工具配置</span>
+          </div>
+          <div class="pref-item" style="flex:1">
+            <label>默认工作流</label>
+            <select id="session-workflow-select" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none; background:var(--input-bg); color:var(--text);">
+              <option value="">不绑定</option>
+            </select>
+            <span class="pref-desc">会话将优先使用该工作流编排执行</span>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-save" onclick="saveSessionSettings()">保存会话设置</button>
+          <button class="btn-test" onclick="applySessionSettings()">应用到当前会话</button>
+        </div>
+        <div id="session-settings-result" class="test-result"></div>
+      </div>
+
+      <!-- 模型供应商 -->
+      <div class="settings-section">
+        <h3>🔌 模型供应商</h3>
+        <p class="hint">支持所有 OpenAI 兼容接口（DeepSeek / OpenAI / 通义 / Kimi / vLLM 等）及 Ollama 本地模型</p>
+        <div id="provider-list"></div>
+        <button id="add-provider-btn" class="btn-add">＋ 添加供应商</button>
+      </div>
+
+      <!-- 预设模板 -->
+      <div class="settings-section">
+        <h3>📦 预设模板（免费模型）</h3>
+        <p class="hint">一键添加常用供应商，区分免费模型和自定义配置</p>
+        <div id="preset-list" class="preset-list">
+          <button class="preset" data-name="DeepSeek" data-url="https://api.deepseek.com" data-key="sk-" data-models="deepseek-chat,deepseek-reasoner" data-free="deepseek-chat" data-ctx="65536">DeepSeek</button>
+          <button class="preset" data-name="OpenAI" data-url="https://api.openai.com/v1" data-key="sk-" data-models="gpt-4o,gpt-4o-mini,gpt-3.5-turbo" data-free="gpt-3.5-turbo" data-ctx="128000">OpenAI</button>
+          <button class="preset" data-name="通义千问 (DashScope)" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="qwen3.7-max,qwen3.7-plus,qwen3.6-plus,deepseek-v4-pro,glm-5.2" data-free="qwen3.6-plus" data-ctx="1000000">通义千问</button>
+          <button class="preset" data-name="阿里云 Token Plan" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="qwen3.7-plus,qwen3.7-max,qwen3.6-plus,qwen3.6-flash,deepseek-v4-pro,deepseek-v4-flash,deepseek-v3.2,glm-5.2,glm-5.1,glm-5,MiniMax-M2.5,kimi-k2.6,kimi-k2.5" data-free="qwen3.6-flash" data-ctx="1000000">阿里云 Token Plan</button>
+          <button class="preset" data-name="阿里云 Coding Plan" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="qwen3.6-plus,qwen3.5-plus,glm-5.2,glm-5.1,glm-5,glm-4.7,MiniMax-M2.5,kimi-k2.5,qwen3-max-2026-01-23,qwen3-coder-next,qwen3-coder-plus" data-free="qwen3.6-plus" data-ctx="1000000">阿里云 Coding Plan</button>
+          <button class="preset" data-name="MiMo (通义)" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-key="sk-" data-models="mimo-v2.5-pro,mimo-v2.5" data-free="mimo-v2.5" data-ctx="128000">MiMo</button>
+          <button class="preset" data-name="ModelScope" data-url="https://api-inference.modelscope.cn/v1" data-key="sk-" data-models="Qwen/Qwen3.5-122B-A10B,ZhipuAI/GLM-5" data-free="Qwen/Qwen3.5-122B-A10B" data-ctx="128000">ModelScope</button>
+          <button class="preset" data-name="Kimi (Moonshot)" data-url="https://api.moonshot.cn/v1" data-key="sk-" data-models="moonshot-v1-8k,moonshot-v1-32k,moonshot-v1-128k" data-free="moonshot-v1-8k" data-ctx="128000">Kimi</button>
+          <button class="preset" data-name="智谱AI (GLM)" data-url="https://open.bigmodel.cn/api/paas/v4" data-key="sk-" data-models="glm-4,glm-4-flash,glm-3-turbo" data-free="glm-4-flash" data-ctx="128000">智谱AI</button>
+          <button class="preset" data-name="硅基流动" data-url="https://api.siliconflow.cn/v1" data-key="sk-" data-models="Qwen/Qwen3-8B,deepseek-ai/DeepSeek-V3,THUDM/glm-4-9b-chat" data-free="Qwen/Qwen3-8B" data-ctx="32000">硅基流动</button>
+          <button class="preset" data-name="Ollama 本地" data-url="http://localhost:11434" data-key="" data-models="" data-free="" data-ctx="32000">Ollama 本地</button>
+          <button class="preset" data-name="OpenRouter" data-url="https://openrouter.ai/api/v1" data-key="sk-or-" data-models="meta-llama/llama-3.1-8b-instruct:free,google/gemma-2-9b-it:free,mistralai/mistral-7b-instruct:free" data-free="meta-llama/llama-3.1-8b-instruct:free" data-ctx="32000">OpenRouter</button>
+          <button class="preset" data-name="OpenCode Zen" data-url="https://opencode.ai/zen/v1" data-key="sk-" data-models="mimo-v2.5-free,deepseek-v4-flash-free,big-pickle,laguna-s-2.1-free,ling-3.0-flash-free,longcat-2.0-free,north-mini-code-free,nemotron-3-ultra-free,qwen3.7-max,qwen3.7-plus,claude-sonnet-4.5,gpt-5.4-mini" data-free="mimo-v2.5-free,deepseek-v4-flash-free,big-pickle,laguna-s-2.1-free,ling-3.0-flash-free,longcat-2.0-free,north-mini-code-free,nemotron-3-ultra-free" data-ctx="200000">OpenCode Zen</button>
+        </div>
+        <div id="preset-info" class="preset-info" style="display:none;margin-top:12px;padding:10px;border-radius:8px;background:var(--msg-user-bg);font-size:12px"></div>
+      </div>
+
+      <!-- 联网搜索 -->
+      <div class="settings-section">
+        <h3>🔍 联网搜索服务</h3>
+        <p class="hint">配置搜索服务，让 Agent 具备联网搜索能力。</p>
+        <label>搜索引擎类型</label>
+        <select id="search-engine" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+          <option value="builtin">🟢 内置搜索（开箱即用，百度/Bing/搜狗）</option>
+          <option value="searxng">SearXNG（需自建 Docker）</option>
+          <option value="google_cse">Google Custom Search</option>
+          <option value="custom">自定义 API</option>
+        </select>
+        <div id="search-url-group" style="display:none">
+          <label>搜索服务地址</label>
+          <input id="search-url" placeholder="如: http://localhost:8080/search" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+          <label>API Key（可选）</label>
+          <input id="search-key" type="password" placeholder="如需要认证则填写" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+        </div>
+        <div class="form-actions">
+          <button class="btn-test" onclick="testSearchService()">🔌 测试连接</button>
+          <button class="btn-save" onclick="saveSearchSettings()">保存搜索设置</button>
+        </div>
+        <div id="search-test-result" class="test-result"></div>
+        <p class="hint" style="margin-top:12px">
+          <b>内置搜索说明：</b>无需配置，开箱即用。聚合百度、Bing、搜狗三大搜索引擎，自动去重，国内网络直接可用。<br>
+          <b>SearXNG 自建教程：</b><br>
+          1. <code>docker run -d -p 8080:8080 searxng/searxng</code><br>
+          2. 地址填 <code>http://localhost:8080/search</code><br>
+          3. 支持 Google、Bing、DuckDuckGo 等多引擎聚合
+        </p>
+      </div>
+      <div class="settings-section">
+        <h3>在线更新</h3>
+        <p class="hint">当前版本 <span id="cur-version">-</span></p>
+        
+        <!-- 自动更新设置 -->
+        <div class="pref-group" style="margin-bottom: 16px;">
+          <h4>自动更新</h4>
+          <div class="pref-row">
+            <div class="pref-item">
+              <label>
+                <input type="checkbox" id="auto-update-enabled" checked onchange="saveAutoUpdateSettings()"> 
+                启用自动检查更新
+              </label>
+              <span class="pref-desc">启动时自动检查新版本</span>
+            </div>
+            <div class="pref-item">
+              <label>检查间隔</label>
+              <select id="auto-update-interval" onchange="saveAutoUpdateSettings()">
+                <option value="6">每6小时</option>
+                <option value="12">每12小时</option>
+                <option value="24" selected>每24小时</option>
+                <option value="48">每48小时</option>
+                <option value="168">每7天</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 更新源配置 -->
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">更新源地址</label>
+          <input id="update-url" placeholder="更新源 JSON 地址（可选）" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        
+        <div class="form-actions">
+          <button class="btn-save" onclick="checkUpdate()">🔄 检查更新</button>
+          <button class="btn-test" onclick="loadUpdateStatus()">📊 查看状态</button>
+        </div>
+        
+        <div id="update-result" class="test-result"></div>
+        
+        <!-- 更新进度条 -->
+        <div id="update-progress" style="display:none; margin-top: 12px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span id="update-progress-text" style="font-size: 12px; color: var(--text-secondary);">准备中...</span>
+            <span id="update-progress-percent" style="font-size: 12px; color: var(--primary);">0%</span>
+          </div>
+          <div style="height: 6px; background: var(--input-bg); border-radius: 3px; overflow: hidden;">
+            <div id="update-progress-bar" style="height: 100%; background: var(--primary); width: 0%; transition: width 0.3s;"></div>
+          </div>
+        </div>
+        
+        <!-- 更新历史 -->
+        <div style="margin-top: 16px;">
+          <button class="btn-test" onclick="toggleUpdateHistory()" style="font-size: 12px;">
+            📋 更新历史 <span id="update-history-count">(0)</span>
+          </button>
+          <div id="update-history" style="display:none; margin-top: 8px; max-height: 200px; overflow-y: auto;">
+            <!-- 动态填充 -->
+          </div>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>关于</h3>
+        <p class="hint">ABcode v0.3.0 · AI Agent 工具 · 数据存储于本地</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 供应商编辑弹窗 -->
+<div id="provider-modal" class="modal" style="display:none">
+  <div class="modal-content provider-form" style="width:560px">
+    <div class="modal-header">
+      <h2 id="provider-modal-title">添加供应商</h2>
+      <button class="modal-close" onclick="closeProviderModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label>名称</label>
+      <input id="pf-name" placeholder="如: DeepSeek">
+      <label>Base URL</label>
+      <input id="pf-url" placeholder="https://api.deepseek.com">
+      <label>API Key</label>
+      <input id="pf-key" type="password" placeholder="sk-...">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+        <label style="margin:0;flex:1">模型列表（逗号分隔）</label>
+        <button class="fetch-models-btn" id="fetch-models-btn" onclick="fetchModels()">🔍 获取全部</button>
+        <button class="fetch-models-btn" id="fetch-free-models-btn" onclick="fetchFreeModels()" style="background:#10b981;border-color:#10b981;">✨ 获取免费</button>
+      </div>
+      <input id="pf-models" placeholder="deepseek-chat, deepseek-reasoner">
+      <div id="model-tags-box" class="model-tags-box" style="display:none;margin-top:8px"></div>
+      <label>默认模型</label>
+      <input id="pf-default" placeholder="deepseek-chat">
+      <label>最大上下文长度（tokens）</label>
+      <input id="pf-context" type="number" placeholder="如: 128000" class="context-input">
+      <div class="context-hint">设置模型支持的最大上下文窗口，影响长文本处理能力。常见值：4096 / 32000 / 128000 / 1000000</div>
+      <div class="form-actions">
+        <button class="btn-test" onclick="testProvider()">🔌 测试连接</button>
+        <button class="btn-save" onclick="saveProvider()">保存</button>
+      </div>
+      <div id="provider-test-result" class="test-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库弹窗 -->
+<div id="kb-modal" class="modal" style="display:none">
+  <div class="modal-content kb-content">
+    <div class="modal-header">
+      <h2>📚 知识库</h2>
+      <button class="modal-close" onclick="closeKb()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="kb-selector">
+        <select id="kb-select" onchange="switchKb(this.value)"></select>
+        <button class="kd-btn" title="新建知识库" onclick="createKbPrompt()">＋ 新建</button>
+        <button class="kd-btn kd-del" title="删除当前知识库(默认库不可删)" onclick="deleteKbPrompt()">🗑 删除</button>
+      </div>
+      <div class="kb-stats" id="kb-stats" style="display:none">
+        <span>📄 文档 <b id="kb-stat-docs">0</b></span>
+        <span>🧩 分块 <b id="kb-stat-chunks">0</b></span>
+        <span>💾 大小 <b id="kb-stat-size">0 KB</b></span>
+        <span class="kb-stats-actions">
+          <button class="kd-btn" title="导出全部文档(JSON备份)" onclick="exportKb()">⬇ 导出</button>
+          <button class="kd-btn kd-del" title="清空知识库" onclick="clearKb()">🗑 清空</button>
+        </span>
+      </div>
+      <div class="kb-upload" id="kb-dropzone">
+        <input type="file" id="kb-file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.py,.js,.ts,.html,.css,.yaml,.yml,.xml,.ini,.conf,.sh,.sql,.c,.cpp,.h,.java,.go,.rs,.php,.rb,.vue,.jsx,.tsx,.toml,.rst,.tex,.pdf,.docx">
+        <button class="btn-save" onclick="uploadKb()">上传文档</button>
+        <p class="hint" style="margin-top:8px">支持 30+ 种文本格式及 PDF/Word（≤10MB），可拖拽文件到此处。上传后自动分块索引，提问时用 BM25 算法自动检索相关内容。</p>
+      </div>
+      <div class="kb-test-search">
+        <input id="kb-test-input" placeholder="输入关键词测试检索效果..." onkeydown="if(event.key==='Enter')kbTestSearch()">
+        <button class="btn-save" onclick="kbTestSearch()">搜索测试</button>
+      </div>
+      <div id="kb-test-results" style="display:none"></div>
+      <div class="kb-doc-filter">
+        <input id="kb-doc-filter-input" placeholder="🔍 按名称过滤文档..." oninput="filterKbDocs()">
+      </div>
+      <div id="kb-doc-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库文档详情弹窗 -->
+<div id="kb-detail-modal" class="modal" style="display:none">
+  <div class="modal-content kb-detail-content">
+    <div class="modal-header">
+      <h2 id="kb-detail-title">📄 文档详情</h2>
+      <button class="modal-close" onclick="closeKbDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="kb-detail-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库快捷引用面板（Ctrl+K / 输入栏 📚 触发） -->
+<div id="kb-ref-panel" class="kb-ref-panel" style="display:none">
+  <div class="kb-ref-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input id="kb-ref-input" placeholder="搜索知识库，点击结果插入引用..." autocomplete="off">
+    <button id="kb-ref-close" class="kb-ref-close">✕</button>
+  </div>
+  <div id="kb-ref-results" class="kb-ref-results">
+    <div class="kb-ref-empty">输入关键词搜索知识库</div>
+  </div>
+</div>
+
+<!-- 定时任务弹窗 -->
+<div id="cron-modal" class="modal" style="display:none">
+  <div class="modal-content cron-content">
+    <div class="modal-header">
+      <h2>⏰ 定时任务</h2>
+      <button class="modal-close" onclick="closeCron()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="cron-form">
+        <label>任务名称</label>
+        <input id="cj-name" placeholder="如: 每日新闻摘要">
+        <label>任务内容（prompt）</label>
+        <textarea id="cj-prompt" rows="2" placeholder="如: 搜索今天的重要新闻并总结"></textarea>
+        <div class="cron-row">
+          <div>
+            <label>固定间隔（分钟）</label>
+            <input id="cj-interval" type="number" min="0" placeholder="0=不使用" value="0">
+          </div>
+          <div>
+            <label>每日定时（HH:MM）</label>
+            <input id="cj-schedule" placeholder="如: 09:00" value="">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-save" onclick="saveCron()">＋ 添加任务</button>
+        </div>
+      </div>
+      <div id="cron-job-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 技能/MCP/连接器管理弹窗 -->
+<div id="tools-modal" class="modal" style="display:none">
+  <div class="modal-content tools-content">
+    <div class="modal-header">
+      <h2>🧩 扩展能力</h2>
+      <button class="modal-close" onclick="closeTools()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tabs">
+        <button class="tab active" data-tab="skills" onclick="switchTab('skills')">Skills 技能</button>
+        <button class="tab" data-tab="mcp" onclick="switchTab('mcp')">MCP 服务器</button>
+        <button class="tab" data-tab="connectors" onclick="switchTab('connectors')">数据连接器</button>
+      </div>
+
+      <!-- Skills -->
+      <div id="tab-skills" class="tab-panel">
+        <p class="hint">技能 = 自定义 Python 工具，自动注册为 Agent 可调用的工具。可在「会话工具」中按会话启用。</p>
+        <div id="skill-list"></div>
+        <div class="sub-form">
+          <h4>＋ 新建技能</h4>
+          <label>名称</label><input id="sk-name" placeholder="如: 汇率查询">
+          <label>描述</label><input id="sk-desc" placeholder="这个技能做什么">
+          <label>代码（Python，定义工具函数）</label>
+          <textarea id="sk-code" rows="6" placeholder='def calc(expr: str):&#10;    """计算表达式"""&#10;    import math&#10;    return str(eval(expr))'></textarea>
+          <div class="form-actions">
+            <button class="btn-save" onclick="saveSkill()">保存技能</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP -->
+      <div id="tab-mcp" class="tab-panel" style="display:none">
+        <p class="hint">连接 MCP (Model Context Protocol) 服务器，自动发现并使用其工具。支持 stdio 子进程和 HTTP 两种传输。</p>
+        <div id="mcp-list"></div>
+        <div class="sub-form">
+          <h4>＋ 添加 MCP 服务器</h4>
+          <label>名称</label><input id="mcp-name" placeholder="如: 文件服务器">
+          <label>传输方式</label>
+          <select id="mcp-transport">
+            <option value="stdio">stdio（本地命令）</option>
+            <option value="http">HTTP（远程服务）</option>
+            <option value="sse">SSE（Server-Sent Events）</option>
+            <option value="websocket">WebSocket（双向实时）</option>
+            <option value="unix">Unix Socket（本地IPC）</option>
+            <option value="tcp">TCP（原始TCP连接）</option>
+          </select>
+          <label id="mcp-cmd-label">启动命令</label><input id="mcp-command" placeholder="如: npx -y @modelcontextprotocol/server-filesystem">
+          <label id="mcp-args-label">参数（JSON 数组）</label><input id="mcp-args" placeholder='["/path"]'>
+          <label id="mcp-url-label" style="display:none">服务器 URL / Socket 路径</label><input id="mcp-url" placeholder="https://mcp.example.com/mcp 或 /tmp/mcp.sock" style="display:none">
+          <label id="mcp-headers-label" style="display:none">自定义请求头（JSON 对象）</label><textarea id="mcp-headers" rows="2" style="display:none" placeholder='{"Authorization": "Bearer xxx"}'></textarea>
+          <div class="form-actions">
+            <button class="btn-test" onclick="testMcp()">🔌 测试连接</button>
+            <button class="btn-save" onclick="saveMcp()">保存</button>
+          </div>
+          <div id="mcp-test-result" class="test-result"></div>
+        </div>
+      </div>
+
+      <!-- Connectors -->
+      <div id="tab-connectors" class="tab-panel" style="display:none">
+        <p class="hint">数据连接器让 Agent 能查询外部数据源（SQLite / CSV / JSON / HTTP / MySQL / PostgreSQL）。</p>
+        <div id="connector-list"></div>
+        <div class="sub-form">
+          <h4>＋ 添加连接器</h4>
+          <label>名称</label><input id="cn-name" placeholder="如: 订单数据库">
+          <label>类型</label>
+          <select id="cn-type" onchange="onConnectorTypeChange()">
+            <option value="sqlite">SQLite 数据库</option>
+            <option value="mysql">MySQL 数据库</option>
+            <option value="postgres">PostgreSQL 数据库</option>
+            <option value="csv">CSV 文件</option>
+            <option value="json">JSON 文件</option>
+            <option value="http">HTTP API</option>
+          </select>
+          <div id="cn-simple-fields">
+            <label id="cn-path-label">文件路径 / URL</label><input id="cn-config" placeholder="如: /Users/xxx/data.db">
+          </div>
+          <div id="cn-db-fields" style="display:none;">
+            <label>主机</label><input id="cn-host" placeholder="如: localhost">
+            <label>端口</label><input id="cn-port" placeholder="如: 3306">
+            <label>数据库名</label><input id="cn-database" placeholder="如: mydb">
+            <label>用户名</label><input id="cn-user" placeholder="如: root">
+            <label>密码</label><input id="cn-password" type="password" placeholder="密码">
+          </div>
+          <div class="form-actions">
+            <button class="btn-save" onclick="saveConnector()">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 会话工具选择弹窗 -->
+<div id="convtools-modal" class="modal" style="display:none">
+  <div class="modal-content convtools-content">
+    <div class="modal-header">
+      <h2>🔧 本会话工具</h2>
+      <button class="modal-close" onclick="closeConvTools()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">选择本会话启用的技能 / MCP / 连接器（留空 = 全部启用）</p>
+      <div class="ct-section">
+        <h4>🧩 技能</h4>
+        <div id="ct-skills" class="ct-checks"></div>
+      </div>
+      <div class="ct-section">
+        <h4>🔌 MCP 服务器</h4>
+        <div id="ct-mcps" class="ct-checks"></div>
+      </div>
+      <div class="ct-section">
+        <h4>📊 数据连接器</h4>
+        <div id="ct-connectors" class="ct-checks"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-save" onclick="saveConvTools()">保存本会话工具配置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道管理弹窗 -->
+<div id="channel-modal" class="modal" style="display:none">
+  <div class="modal-content channel-content">
+    <div class="modal-header">
+      <h2>📡 频道管理</h2>
+      <button class="modal-close" onclick="closeChannelModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="channel-stats">已激活 <strong id="channel-active-count">0</strong> 个频道</div>
+      <div class="channel-section-title">已激活</div>
+      <div id="channel-enabled-list" class="channel-enabled-list"></div>
+      <div class="channel-section-title">未激活</div>
+      <div id="channel-disabled-grid" class="channel-disabled-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道配置弹窗 -->
+<div id="channel-config-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:560px; max-width:92vw;">
+    <div class="modal-header">
+      <h2 id="chcfg-title">⚙ 频道配置</h2>
+      <button class="modal-close" onclick="closeChannelConfig()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="chcfg-fields" class="chcfg-fields"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="ch-btn" onclick="closeChannelConfig()">取消</button>
+        <button class="btn-save" onclick="saveChannelConfig()">保存配置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道扫码接入弹窗 -->
+<div id="channel-qr-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:420px; max-width:92vw;">
+    <div class="modal-header">
+      <h2 id="chqr-title">📱 扫码接入</h2>
+      <button class="modal-close" onclick="closeChannelQr()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <div id="chqr-qr" style="margin:12px auto; width:260px; height:260px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+        <span class="hint" style="color:var(--muted)">生成中…</span>
+      </div>
+      <p id="chqr-tip" class="hint">请用手机扫码，在手机上确认接入该频道</p>
+      <p id="chqr-status" class="hint" style="min-height:20px;"></p>
+      <p id="chqr-webhook-hint" class="hint" style="font-size:12px;color:var(--muted);text-align:left;word-break:break-all;background:var(--bg2,#f4f4f5);padding:8px 10px;border-radius:8px;margin-top:6px;"></p>
+      <div style="display:flex; justify-content:center; gap:8px; margin-top:8px;">
+        <button class="ch-btn" onclick="closeChannelQr()">关闭</button>
+        <button class="ch-btn" onclick="openChannelQr(currentQrChannelId)">刷新二维码</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道消息记录弹窗 -->
+<div id="channel-msgs-modal" class="modal" style="display:none">
+  <div class="modal-content" style="width:640px; max-width:94vw;">
+    <div class="modal-header">
+      <h2 id="chmsgs-title">💬 频道消息</h2>
+      <button class="modal-close" onclick="closeChannelMsgs()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="chmsgs-list" style="max-height:46vh; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg2,#fafafa);"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px;">
+        <span class="hint" style="font-size:12px;">通用频道收发地址：<code id="chmsgs-webhook" style="background:#fff;padding:2px 6px;border-radius:4px;"></code></span>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <input id="chmsgs-test-sender" type="text" value="测试用户" placeholder="发送者(可选)" style="flex:0 0 110px;">
+        <input id="chmsgs-test-text" type="text" placeholder="输入消息，回车发送（模拟频道对话）" style="flex:1;">
+        <button class="ch-btn" onclick="sendChannelTestMsg()">发送</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:10px;">
+        <button class="ch-btn" onclick="clearChannelMsgs()">🗑 清空消息</button>
+        <button class="btn-save" onclick="closeChannelMsgs()">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 消息内容渲染器（Markdown 轻量渲染，本地化无外网依赖） -->
+<script src="marked.min.js"></script>
+<script src="highlight.min.js"></script>
+<script src="app.js?v=20260812a"></script>
+</body>
+</html>

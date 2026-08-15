@@ -1,0 +1,25 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+pydantic>=2.0
+python-multipart==0.0.20
+requests>=2.28.0
+lxml>=4.9.0
+
+# 钉钉 Stream 频道（可选，未安装时钉钉频道仅提示缺少依赖）
+dingtalk-stream>=0.13.0
+
+# Windows 桌面壳（可选，未安装时 exe 回退为浏览器模式）
+pywebview>=4.0
+
+# 各 IM 频道运行时（均可选：未安装时对应频道仅提示缺少依赖，不影响其他功能）
+websockets>=12.0        # Discord / OneBot / Mattermost 长连接
+lark-oapi>=0.5.0        # 飞书官方长连接
+slack_sdk>=3.29.0       # Slack Socket Mode
+paho-mqtt>=1.6.1        # MQTT 订阅-发布
+qq-botpy>=1.1.0         # QQ 官方机器人（PyPI 最新 1.2.1，勿写超过 1.2.1 的下限）
+faster-whisper>=1.0.0        # 本地语音识别（离线 ASR）
+
+# 蜂群多Agent引擎（agno：Python3.9 兼容的最快轻量 agent 框架）
+agno>=2.8.0
+openai>=1.40.0

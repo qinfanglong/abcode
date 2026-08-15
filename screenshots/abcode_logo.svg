@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed"/><stop offset="40%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <!-- A: 圆润粗体 -->
+  <path d="M130,420 Q130,410 140,398 L256,68 Q262,55 268,68 L384,398 Q394,410 394,420" fill="none" stroke="url(#g1)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- A横杠 -->
+  <line x1="170" y1="310" x2="354" y2="310" stroke="url(#g1)" stroke-width="32" stroke-linecap="round"/>
+  <!-- B竖线 -->
+  <line x1="420" y1="75" x2="420" y2="420" stroke="url(#g1)" stroke-width="56" stroke-linecap="round"/>
+  <!-- B上弧 -->
+  <path d="M420,75 L468,75 Q540,75 540,150 Q540,228 468,228 L420,228" fill="none" stroke="url(#g1)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- B下弧 -->
+  <path d="M420,228 L478,228 Q555,228 555,322 Q555,420 478,420 L420,420" fill="none" stroke="url(#g1)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 分隔线 -->
+  <line x1="100" y1="455" x2="580" y2="455" stroke="url(#g1)" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <!-- code -->
+  <text x="340" y="500" text-anchor="middle" font-family="'SF Mono','Fira Code','Consolas',monospace" font-size="58" font-weight="400" fill="url(#g1)" letter-spacing="14" opacity="0.65">code</text>
+  <!-- 装饰圆点 -->
+  <circle cx="95" cy="65" r="6" fill="#7c3aed" opacity="0.45"/>
+  <circle cx="118" cy="65" r="6" fill="#3b82f6" opacity="0.45"/>
+  <circle cx="141" cy="65" r="6" fill="#06b6d4" opacity="0.45"/>
+</svg>

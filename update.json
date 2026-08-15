@@ -1,0 +1,14 @@
+{
+  "version": "0.5.0",
+  "changelog": "新增内置搜索引擎（百度/Bing/搜狗）、联网搜索技能、Agent时间感知",
+  "files": {
+    "mac": {
+      "url": "https://github.com/qinfanglong/abcode/releases/download/v0.5.0/ABcode-mac.zip",
+      "md5": ""
+    },
+    "win": {
+      "url": "https://github.com/qinfanglong/abcode/releases/download/v0.5.0/ABcode-win.zip",
+      "md5": ""
+    }
+  }
+}

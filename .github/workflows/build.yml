@@ -1,0 +1,466 @@
+name: build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: 构建 Mac .app + DMG
+        run: |
+          # CI 需要自建 venv 并安装依赖，build_mac.sh 会从 .venv 复制 site-packages 进 App
+          python -m venv .venv
+          .venv/bin/pip install -r backend/requirements.txt --quiet
+          # 关键：build_mac.sh 内部使用裸 python3/pip，macos runner 系统 python 版本过新，
+          # 会因 PyAV/ctranslate2 等无对应 wheel 而安装失败。强制 PATH 优先用 setup-python 的 3.9。
+          export PATH="$PWD/.venv/bin:$PATH"
+          chmod +x build_mac.sh
+          ./build_mac.sh > /tmp/build_mac.log 2>&1 || { echo '=== build_mac.log tail ==='; tail -80 /tmp/build_mac.log; exit 1; }
+      - name: 上传构建日志（便于排查）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-build-log
+          path: /tmp/build_mac.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dist
+          path: dist/ABcode-mac-*.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-zip
+          path: dist/ABcode-mac-*.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-dev libwebkit2gtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf desktop-file-utils \
+            fuse libfuse2 squashfs-tools
+      - name: 创建虚拟环境并安装依赖
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+      - name: PyInstaller 打包 Linux
+        run: |
+          source .venv/bin/activate
+          pyinstaller \
+            --onefile \
+            --name ABcode \
+            --add-data "frontend:frontend" \
+            --add-data "backend:backend" \
+            --add-data "backend/requirements.txt:." \
+            --hidden-import=uvicorn \
+            --hidden-import=fastapi \
+            --hidden-import=sqlite3 \
+            --hidden-import=websockets \
+            --hidden-import=httpx \
+            --hidden-import=workflow_mod \
+            --hidden-import=dingtalk_stream \
+            --hidden-import=lark_oapi \
+            --hidden-import=slack_sdk \
+            --hidden-import=paho.mqtt \
+            --hidden-import=botpy \
+            --hidden-import=faster_whisper \
+            --hidden-import=ctranslate2 \
+            --hidden-import=av \
+            --hidden-import=onnxruntime \
+            --hidden-import=hf_xet \
+            --collect-all faster_whisper \
+            --collect-all ctranslate2 \
+            --collect-all av \
+            --collect-all onnxruntime \
+            --collect-all hf_xet \
+            backend/main.py
+      - name: 创建 AppImage
+        run: |
+          set -e
+          echo "VERSION=$VERSION  dist/ABcode size=$(stat -c%s dist/ABcode 2>/dev/null || echo 0)"
+          # 创建 AppDir 结构
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          # 复制可执行文件
+          cp dist/ABcode AppDir/usr/bin/
+
+          # 创建 .desktop 文件（用 printf 逐行写，避免 heredoc 在 YAML 块中的转写问题）
+          printf '%s\n' \
+            '[Desktop Entry]' \
+            'Type=Application' \
+            'Name=ABcode' \
+            'Exec=ABcode' \
+            'Icon=abcode' \
+            'Categories=Development;Utility;' \
+            'Comment=Local AI Agent Desktop App' \
+            > AppDir/usr/share/applications/abcode.desktop
+          echo "desktop 文件内容："
+          cat AppDir/usr/share/applications/abcode.desktop
+          ls -la AppDir/usr/share/applications/
+
+          # 复制图标（同时放到 usr/share/icons 与 AppDir 根目录，appimagetool 要求根目录有 Icon= 对应文件）
+          if [ -f build/icon.ico ]; then
+            cp build/icon.ico AppDir/usr/share/icons/hicolor/256x256/apps/abcode.png 2>/dev/null || true
+          fi
+          cp frontend/abcode_logo.svg AppDir/usr/share/icons/hicolor/256x256/apps/abcode.svg 2>/dev/null || true
+          cp frontend/abcode_logo.svg AppDir/abcode.svg 2>/dev/null || true
+          # 根目录必须存在与 Icon= 同名的图标（appimagetool 检查 $APPDIR/abcode.svg/.png/.xpm）
+          if [ ! -f AppDir/abcode.svg ] && [ ! -f AppDir/abcode.png ]; then
+            echo "::error title=icon::AppDir 根目录缺少 Icon=abcode 图标文件"
+            exit 1
+          fi
+
+          # AppRun 入口（printf 写入，避免 heredoc 问题）
+          printf '%s\n' \
+            '#!/bin/bash' \
+            'HERE="$(dirname "$(readlink -f "$0")")"' \
+            'export PYTHONPATH="$HERE/usr/bin:$PYTHONPATH"' \
+            'exec "$HERE/usr/bin/ABcode" "$@"' \
+            > AppDir/AppRun
+          chmod +x AppDir/AppRun AppDir/usr/bin/ABcode
+
+          # appimagetool 只会在 AppDir 根目录（非递归）查找 *.desktop，必须复制一份到根目录
+          cp AppDir/usr/share/applications/abcode.desktop AppDir/abcode.desktop
+          echo "root desktop: $(ls -la AppDir/abcode.desktop)"
+          echo "AppDir 就绪: $(find AppDir -type f | wc -l) 个文件"
+
+          # 下载 appimagetool（多源重试 + 大小校验）
+          for url in \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"; do
+            echo "尝试下载: $url"
+            if wget -q -O appimagetool.AppImage "$url"; then
+              sz=$(stat -c%s appimagetool.AppImage 2>/dev/null || echo 0)
+              echo "下载完成: $sz bytes"
+              if [ "$sz" -gt 1000000 ]; then break; fi
+            fi
+          done
+          chmod +x appimagetool.AppImage
+          [ -s appimagetool.AppImage ] || { echo "::error title=appimagetool::下载失败或文件为空"; exit 1; }
+
+          # 生成 AppImage（GitHub Actions runner 无 FUSE，需 extract-and-run；失败再回退直接运行）
+          set +e
+          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run AppDir "ABcode-linux-${VERSION#v}.AppImage" 2>appimg_err.txt
+          rc1=$?
+          if [ $rc1 -eq 0 ]; then
+            echo "extract-and-run 生成成功"
+          else
+            echo "extract-and-run 失败(rc=$rc1)，回退直接运行..."
+            ARCH=x86_64 ./appimagetool.AppImage AppDir "ABcode-linux-${VERSION#v}.AppImage" 2>>appimg_err.txt
+          fi
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "::error title=AppImage-rc$rc::$(tail -c 700 appimg_err.txt | tr '\n' ' ')"
+            exit 1
+          fi
+          ls -lh ABcode-linux-*.AppImage
+      - name: 创建源码包
+        run: |
+          mkdir -p dist_linux
+          tar -czf dist_linux/ABcode-linux-source-${VERSION#v}.tar.gz \
+            backend frontend macapp start.sh start.bat README.md docs CHANGELOG.md LICENSE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: |
+            ABcode-linux-*.AppImage
+            dist_linux/*.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: 安装 PyInstaller 和 NSIS
+        run: |
+          python -m pip install pyinstaller --quiet
+          # 必须安装运行时依赖！否则 PyInstaller 收集不到 fastapi/uvicorn 等，
+          # 打包出的 exe 运行时报 "No module named fastapi"
+          python -m pip install -r backend/requirements.txt --quiet
+          # 下载便携版 NSIS 3.09（固定路径，避免 choco 安装路径/版本差异）
+          # 使用 curl.exe（Windows 自带）+ 多镜像重试，Invoke-WebRequest 在 runner 上易失败
+          $mirrors = @(
+            "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip",
+            "https://master.dl.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip?viasf=1",
+            "https://kent.dl.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip?viasf=1"
+          )
+          $downloaded = $false
+          foreach ($url in $mirrors) {
+            Write-Host "尝试下载 NSIS: $url"
+            curl.exe -L --retry 3 --connect-timeout 30 -o nsis.zip $url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path nsis.zip) -and ((Get-Item nsis.zip).Length -gt 1000000)) {
+              $downloaded = $true
+              Write-Host "下载成功: $((Get-Item nsis.zip).Length) bytes"
+              break
+            }
+          }
+          if (-not $downloaded) {
+            Write-Error "NSIS 便携版下载失败（所有镜像均失败）"
+            exit 1
+          }
+          # 校验 ZIP 头（PK..）防止下载到 HTML
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path nsis.zip))[0..1]
+          if (-not ($bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B)) {
+            Write-Error "nsis.zip 不是有效的 ZIP 文件"
+            exit 1
+          }
+          Expand-Archive nsis.zip -DestinationPath . -Force
+          Get-ChildItem nsis-* | Select-Object Name
+          if (-not (Test-Path ".\nsis-3.09\makensis.exe")) {
+            Write-Error "NSIS 便携版缺少 makensis.exe"
+            exit 1
+          }
+      - name: PyInstaller 打包 Windows 单文件 exe
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:VERSION.TrimStart('v')
+          
+          Write-Host "Building Windows executable with PyInstaller..."
+          python -m PyInstaller `
+            --onefile `
+            --noconsole `
+            --name ABcode `
+            --icon=build/icon.ico `
+            --add-data "frontend;frontend" `
+            --add-data "backend;backend" `
+            --add-data "backend/requirements.txt;." `
+            --hidden-import=uvicorn `
+            --hidden-import=fastapi `
+            --hidden-import=sqlite3 `
+            --hidden-import=websockets `
+            --hidden-import=httpx `
+            --hidden-import=workflow_mod `
+            --hidden-import=dingtalk_stream `
+            --hidden-import=lark_oapi `
+            --hidden-import=slack_sdk `
+            --hidden-import=paho.mqtt `
+            --hidden-import=botpy `
+            --hidden-import=faster_whisper `
+            --hidden-import=ctranslate2 `
+            --hidden-import=av `
+            --hidden-import=onnxruntime `
+            --hidden-import=hf_xet `
+            --collect-all faster_whisper `
+            --collect-all ctranslate2 `
+            --collect-all av `
+            --collect-all onnxruntime `
+            --collect-all hf_xet `
+            backend/main.py
+          
+          if (-not (Test-Path "dist/ABcode.exe")) {
+            Write-Error "PyInstaller failed - dist/ABcode.exe not found"
+            exit 1
+          }
+          Write-Host "PyInstaller success: dist/ABcode.exe created"
+          
+          # copy portable exe to dist root for upload
+          Copy-Item dist/ABcode.exe dist/ABcode-${version}.exe
+      - name: 创建 NSIS 安装包
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:VERSION.TrimStart('v')
+          
+          Write-Host "Creating NSIS installer..."
+          
+          # prepare installer resources
+          Copy-Item build/start_windows.bat dist/ -Force
+          Copy-Item build/icon.ico dist/ -Force
+          New-Item -ItemType Directory -Force -Path dist/build | Out-Null
+          Copy-Item build/icon.ico dist/build/ -Force
+          Copy-Item build/banner.bmp dist/build/ -Force
+          
+          # run NSIS (use -DVERSION=..., /DVERSION would be treated as a script file)
+          # ROOT is an absolute repo path, avoiding NSIS resolving relative paths from script dir
+          $nsisPath = ".\nsis-3.09\makensis.exe"
+          # ROOT must stay backslash form:
+          # NSIS File only accepts X:\ absolute paths; forward slashes/mixed separators fail
+          $rootPath = $env:GITHUB_WORKSPACE
+          Write-Host "makensis: $nsisPath  ROOT=$rootPath"
+          # diagnose: verify installer resources exist at repo root
+          foreach ($f in @("build\banner.bmp", "build\icon.ico", "LICENSE", "dist\ABcode.exe", "build\start_windows.bat")) {
+            Write-Host "check $f => $(Test-Path (Join-Path $rootPath $f))"
+          }
+          Write-Host "banner.bmp size: $((Get-Item (Join-Path $rootPath 'build\banner.bmp') -ErrorAction SilentlyContinue).Length)"
+          # capture makensis output; on failure write tail to ::error:: annotation
+          $output = & $nsisPath "-DVERSION=$version" "-DROOT=$rootPath" build/installer.nsi 2>&1
+          $code = $LASTEXITCODE
+          Write-Host ($output -join "`n")
+          if ($code -ne 0) {
+            $tail = ($output | Select-Object -Last 20) -join " || "
+            Write-Host "::error title=makensis-exit$code::$tail"
+            exit 1
+          }
+          
+          # verify installer
+          $installer = Get-ChildItem dist/ABcode-Setup-*.exe -ErrorAction SilentlyContinue
+          if ($installer) {
+            Write-Host "Installer created: $($installer.FullName) ($($installer.Length) bytes)"
+          } else {
+            Write-Error "Installer not found"
+            exit 1
+          }
+      - name: 创建 Windows 源码包
+        shell: powershell
+        run: |
+          $version = $env:VERSION.TrimStart('v')
+          Compress-Archive -Path "backend/*", "frontend/*", "macapp/*", "start.sh", "start.bat", "README.md", "docs/*", "CHANGELOG.md", "LICENSE" -DestinationPath "dist/ABcode-windows-source-${version}.zip" -Force
+      - name: 创建便携版 zip（解压即用，无需安装）
+        shell: powershell
+        run: |
+          $version = $env:VERSION.TrimStart('v')
+          New-Item -ItemType Directory -Force -Path "dist_portable/ABcode-portable" | Out-Null
+          Copy-Item "dist/ABcode.exe" "dist_portable/ABcode-portable/ABcode.exe"
+          $lines = @()
+          $lines += "ABcode portable (no install needed)"
+          $lines += "============================"
+          $lines += "1. Extract this zip to any folder"
+          $lines += "2. Double-click ABcode.exe to start"
+          $lines += "3. Browser auto-opens http://127.0.0.1:8900"
+          $lines += ""
+          $lines += "Data is stored in data/ next to the exe; delete the folder to remove everything."
+          $lines += "If antivirus blocks it, choose 'Allow' (false positive common for PyInstaller apps)."
+          $lines | Out-File -Encoding utf8 "dist_portable/ABcode-portable/README.txt"
+          $portableZip = "dist/ABcode-portable-" + $version + ".zip"
+          Compress-Archive -Path "dist_portable/ABcode-portable/*" -DestinationPath $portableZip -Force
+          $sz = (Get-Item $portableZip).Length
+          Write-Host "portable zip: $sz bytes"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: |
+            dist/ABcode-Setup-*.exe
+            dist/ABcode-*.exe
+            dist/ABcode-portable-*.zip
+            dist/ABcode-windows-source-*.zip
+
+  # 真实 Windows 环境冒烟测试：静默安装 NSIS 安装包 → 启动 ABcode.exe → 探测服务
+  windows-smoke-test:
+    runs-on: windows-latest
+    needs: build-windows
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-dist
+          path: win
+      - name: 静默安装
+        shell: powershell
+        run: |
+          $setup = Get-ChildItem "win/ABcode-Setup-*.exe" | Select-Object -First 1
+          if (-not $setup) { Write-Error "installer not found"; exit 1 }
+          Write-Host "Setup file: $($setup.FullName) ($($setup.Length) bytes)"
+          Start-Process -FilePath $setup.FullName -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 3
+          $inst = "$env:LOCALAPPDATA\ABcode"
+          Write-Host "Install dir: $inst"
+          Get-ChildItem $inst -Recurse 2>$null | Select-Object FullName, Length
+          if (-not (Test-Path "$inst\ABcode.exe")) { Write-Error "ABcode.exe not installed"; exit 1 }
+          Write-Host "PASS: install ok"
+      - name: 启动并验证服务
+        shell: powershell
+        run: |
+          $inst = "$env:LOCALAPPDATA\ABcode"
+          $stdoutF = Join-Path $PWD "exe_stdout.log"
+          $stderrF = Join-Path $PWD "exe_stderr.log"
+          try {
+            Start-Process -FilePath "$inst\ABcode.exe" -RedirectStandardOutput $stdoutF -RedirectStandardError $stderrF -ErrorAction Stop
+          } catch {
+            New-Item -ItemType Directory -Force -Path "diag" | Out-Null
+            Set-Content -Path "diag\info.txt" -Value ("START_PROCESS_ERROR: " + $_.Exception.Message + "`ninst=" + $inst + "`nexe_exists=" + (Test-Path "$inst\ABcode.exe"))
+            Write-Error "FAIL: Start-Process failed: $($_.Exception.Message)"
+            exit 1
+          }
+          $ok = $false
+          for ($i = 0; $i -lt 80; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8900" -TimeoutSec 3 -UseBasicParsing
+              if ($r.StatusCode -eq 200) { $ok = $true; Write-Host "PASS: service HTTP $($r.StatusCode)"; break }
+            } catch { Write-Host "probe #$i failed: $($_.Exception.Message)" }
+          }
+          if (-not $ok) {
+            Write-Host "=== data\abcode.log ==="
+            Get-Content "$inst\data\abcode.log" -ErrorAction SilentlyContinue
+            Write-Host "=== exe_stderr.log ==="
+            Get-Content $stderrF -ErrorAction SilentlyContinue
+            Write-Host "=== exe_stdout.log (tail) ==="
+            Get-Content $stdoutF -ErrorAction SilentlyContinue | Select-Object -Last 30
+            Write-Host "=== processes ==="
+            Get-Process ABcode -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, StartTime
+            New-Item -ItemType Directory -Force -Path "diag" | Out-Null
+            Copy-Item "$inst\data\abcode.log" "diag\abcode.log" -ErrorAction SilentlyContinue
+            Copy-Item "$inst\data\abcode.db" "diag\" -ErrorAction SilentlyContinue
+            Copy-Item $stdoutF "diag\exe_stdout.log" -ErrorAction SilentlyContinue
+            Copy-Item $stderrF "diag\exe_stderr.log" -ErrorAction SilentlyContinue
+            Set-Content -Path "diag\info.txt" -Value ("probes=" + $i + "`ninst=" + $inst + "`nhas_data_log=" + (Test-Path "$inst\data\abcode.log"))
+            Write-Error "FAIL: ABcode service failed to start"
+            exit 1
+          }
+          $db = "$inst\data\abcode.db"
+          if (Test-Path $db) { Write-Host "PASS: db persisted $((Get-Item $db).Length) bytes" }
+          else { Write-Host "WARN: db NOT in exe-adjacent data/" }
+          # uninstall test (installer MUST create uninstall.exe)
+          $uninst = "$inst\uninstall.exe"
+          if (-not (Test-Path $uninst)) { Write-Error "FAIL: uninstall.exe not created"; exit 1 }
+          Start-Process -FilePath $uninst -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 2
+          if (Test-Path "$env:LOCALAPPDATA\ABcode") { Write-Error "FAIL: leftover dir after uninstall"; exit 1 }
+          else { Write-Host "PASS: uninstall ok" }
+
+      - name: 上传诊断日志（失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-smoke-diag
+          path: diag/
+  release:
+    needs: [build-mac, build-linux, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+      - name: 整理文件
+        run: |
+          find dist -type f -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.tar.gz" -o -name "*.exe" | head -20
+          ls -la dist/
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/ABcode-mac-*.dmg
+            dist/**/ABcode-mac-*.zip
+            dist/**/ABcode-linux-*.AppImage
+            dist/**/ABcode-linux-source-*.tar.gz
+            dist/**/ABcode-Setup-*.exe
+            dist/**/ABcode-*.exe
+            dist/**/ABcode-portable-*.zip
+            dist/**/ABcode-windows-source-*.zip
+          generate_release_notes: true
