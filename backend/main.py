@@ -242,7 +242,7 @@ def api_fetch_models(body: dict):
     # OpenCode Zen 特殊处理：使用硬编码列表，准确区分免费/付费
     if "opencode.ai" in base_url.lower():
         models = [
-            "mimo-v2.5-free", "deepseek-v4-flash-free", "big-pickle",
+            "mimo-v2.5-free", "big-pickle",
             "laguna-s-2.1-free", "ling-3.0-flash-free", "longcat-2.0-free",
             "north-mini-code-free", "nemotron-3-ultra-free",
             "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
@@ -304,7 +304,7 @@ def api_fetch_models(body: dict):
         # 尝试 OpenCode Zen 格式
         if "opencode.ai" in base_url.lower():
             models = [
-                "mimo-v2.5-free", "deepseek-v4-flash-free", "big-pickle",
+                "mimo-v2.5-free", "big-pickle",
                 "laguna-s-2.1-free", "ling-3.0-flash-free", "longcat-2.0-free",
                 "north-mini-code-free", "nemotron-3-ultra-free",
                 "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
@@ -1825,6 +1825,26 @@ def api_delete_agent(aid: str):
     return {"ok": True}
 
 
+
+@app.post("/api/agents/multi/run")
+def api_run_multi_agent(body: dict = Body(...)):
+    """运行多Agent编排"""
+    main_agent_id = body.get("main_agent_id")
+    sub_agent_ids = body.get("sub_agent_ids", [])
+    task = body.get("task", "")
+    context = body.get("context", {})
+    mode = body.get("mode")  # 可选：临时覆盖主Agent的协作模式
+    
+    if not main_agent_id:
+        raise HTTPException(400, "缺少 main_agent_id")
+    
+    orchestrator = AgentManager.create_multi_agent_orchestrator(main_agent_id, sub_agent_ids)
+    if mode in ("sequential", "parallel", "router", "planner_executor"):
+        orchestrator.mode = mode
+    result = orchestrator.execute(task, context)
+    return result
+
+
 @app.post("/api/agents/{aid}/run")
 def api_run_agent(aid: str, body: dict = Body(...)):
     """运行智能体（同步）"""
@@ -1858,23 +1878,6 @@ def api_run_agent_stream(aid: str, body: dict = Body(...)):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-@app.post("/api/agents/multi/run")
-def api_run_multi_agent(body: dict = Body(...)):
-    """运行多Agent编排"""
-    main_agent_id = body.get("main_agent_id")
-    sub_agent_ids = body.get("sub_agent_ids", [])
-    task = body.get("task", "")
-    context = body.get("context", {})
-    mode = body.get("mode")  # 可选：临时覆盖主Agent的协作模式
-    
-    if not main_agent_id:
-        raise HTTPException(400, "缺少 main_agent_id")
-    
-    orchestrator = AgentManager.create_multi_agent_orchestrator(main_agent_id, sub_agent_ids)
-    if mode in ("sequential", "parallel", "router", "planner_executor"):
-        orchestrator.mode = mode
-    result = orchestrator.execute(task, context)
-    return result
 
 
 # ================= 蜂群多 Agent（agno 引擎） =================
