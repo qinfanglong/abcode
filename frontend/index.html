@@ -8,10 +8,10 @@
 <meta http-equiv="Expires" content="0">
 <script>
 // 强制缓存刷新：如果版本不匹配，清除所有缓存并重载
-(function(){var v='20260811c';if(localStorage.getItem('_av')!==v){localStorage.setItem('_av',v);if('caches' in window){caches.keys().then(function(n){n.forEach(function(k){caches.delete(k)})})}location.reload(true);return}window._avv=v})();
+(function(){var v='20260812c';if(localStorage.getItem('_av')!==v){localStorage.setItem('_av',v);if('caches' in window){caches.keys().then(function(n){n.forEach(function(k){caches.delete(k)})})}location.reload(true);return}window._avv=v})();
 </script>
 <title>ABcode - AI Agent 工具</title>
-<link rel="stylesheet" href="style.css?v=20260812a">
+<link rel="stylesheet" href="style.css?v=20260812c">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f6ef7'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>AB</text></svg>">
 </head>
 <body>
@@ -412,6 +412,8 @@
           <div style="display:flex; gap:8px;">
             <button class="btn-save" onclick="createNewWorkflow()">＋ 新建工作流</button>
             <button class="btn-test" onclick="showWfTemplates()">📋 模板库</button>
+            <button class="btn-test" onclick="document.getElementById('wf-import-file').click()">📥 导入 DSL</button>
+            <input type="file" id="wf-import-file" accept="application/json,.json" style="display:none" onchange="importWorkflowDSL(this)">
           </div>
           <div style="display:flex; gap:6px;">
             <button class="wf-view-btn active" data-view="list" onclick="switchWfView('list')">列表</button>
@@ -433,6 +435,9 @@
             <input id="wf-desc-input" placeholder="描述（可选）" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; width:250px;">
           </div>
           <div style="display:flex; gap:8px;">
+            <button class="btn-test" onclick="exportCurrentWorkflowDSL()">📤 导出 DSL</button>
+            <button class="btn-test" onclick="document.getElementById('wf-import-file-editor').click()">📥 导入 DSL</button>
+            <input type="file" id="wf-import-file-editor" accept="application/json,.json" style="display:none" onchange="importWorkflowDSL(this)">
             <button class="btn-test" onclick="saveCurrentWorkflow()">💾 保存</button>
             <button class="btn-save" id="wf-test-toggle-btn" onclick="toggleTestPanel()">▶ 测试</button>
           </div>
@@ -702,6 +707,12 @@
                 <input type="checkbox" id="agent-switch-pref" checked> Agent 模式
               </label>
               <span class="pref-desc">启用 Agent 自主决策和工具调用能力</span>
+            </div>
+            <div class="pref-item">
+              <label class="switch-label">
+                <input type="checkbox" id="thinking-toggle-pref"> 思考模式
+              </label>
+              <span class="pref-desc">显示模型的思考过程（需模型支持）</span>
             </div>
           </div>
         </div>
@@ -1231,6 +1242,6 @@
 <!-- 消息内容渲染器（Markdown 轻量渲染，本地化无外网依赖） -->
 <script src="marked.min.js"></script>
 <script src="highlight.min.js"></script>
-<script src="app.js?v=20260812a"></script>
+<script src="app.js?v=20260812c"></script>
 </body>
 </html>

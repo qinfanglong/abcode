@@ -635,7 +635,7 @@ def search(query, top_k=5, kb_id: str = None, min_score: float = 0.0, diversify:
         remaining.sort(key=lambda x: -x["total"])
         picked.append(remaining.pop(0))
         while remaining and len(picked) < top_k:
-            best = None
+            best = 0
             best_val = -1
             for i, cand in enumerate(remaining):
                 # 多样性惩罚：与已选中文档重合度（同文档 + 相似内容）

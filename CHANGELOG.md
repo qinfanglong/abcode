@@ -2,6 +2,18 @@
 
 所有用户可见的变更都记录在此。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 工作流 · 开始节点优化
+- **结构化入参定义**：开始节点支持像其它节点一样配置带「类型」的参数，而非仅逗号分隔字段名
+  - 字段属性：参数名、类型（string / text / number / integer / float / boolean / select / multi_select / date / datetime / time / file / password / email / url / object / array）、默认值、是否必填、选项（select 用）
+  - 后端按类型做强制转换与校验：number/integer/float→数值、boolean→布尔、select→选项校验回退首个、multi_select→逗号分隔数组、date/datetime/time/file/password/email/url/text/string→文本、object/array→JSON 对象/数组
+  - 必填项缺失时执行报错并提示字段名
+- **类型二级选择**：类型下拉改为「分组 + 具体类型」两级联动，文本/数值/布尔/选择/日期时间/文件/复合 7 大分组，避免 17 个类型平铺难找
+- **运行时动态表单**：运行复杂工作流前，按 start 节点 schema 弹出对应类型输入框（数字框 / 勾选 / 下拉 / 文件 / 多选等），填完即跑
+- **新增 API**：`GET /api/workflows/{wid}/input_schema` 返回开始节点入参 schema，供前端动态生成表单
+- **向后兼容**：保留旧版 `input_fields`（逗号分隔字符串）配置，作为 string 类型字段处理
+
 ## [0.10.0] - 2026-08-13
 
 ### 蜂群多 Agent（agno 引擎 · 更快）

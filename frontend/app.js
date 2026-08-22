@@ -5451,12 +5451,13 @@ function appendWfTestMsg(role, content, nodeResults) {
           const cls = nr.status === "completed" ? "completed" : nr.status === "failed" ? "failed" : "running";
           const si = nr.status === "completed" ? "✅" : nr.status === "failed" ? "❌" : "⏳";
           const outputText = nr.output ? `<pre style="margin:4px 0 0; padding:6px 8px; background:#f3f4f6; border-radius:4px; font-size:11px; white-space:pre-wrap; word-break:break-all; max-height:100px; overflow-y:auto;">${esc(String(nr.output).substring(0, 500))}</pre>` : '';
+          const errorText = nr.error ? `<pre style="margin:4px 0 0; padding:6px 8px; background:#fef2f2; border:1px solid #fecaca; border-radius:4px; font-size:11px; color:#dc2626; white-space:pre-wrap; word-break:break-all; max-height:100px; overflow-y:auto;">❌ ${esc(String(nr.error).substring(0, 500))}</pre>` : '';
           return `<div class="wf-node-status ${cls}" style="padding:6px 8px; margin-bottom:4px; background:#fafafa; border-radius:6px; border:1px solid #e5e7eb;">
             <div style="display:flex; align-items:center; gap:6px;">
               <span>${si}</span><span>${ic}</span><span style="font-weight:500;">${esc(nr.label || nr.node_id)}</span>
               <span style="margin-left:auto; font-size:10px; color:#9ca3af;">${nr.duration_ms ? nr.duration_ms + 'ms' : ''}</span>
             </div>
-            ${outputText}
+            ${errorText || outputText}
           </div>`;
         }).join('')}
       </div>
@@ -5670,15 +5671,16 @@ async function executeWfTestWithMessage(text) {
       });
       clearWfNodeRunStates();
       if (thinkingEl) thinkingEl.remove();
+      const nodeResults = Object.values(result.node_results || result.nodes_status || {}).map(nr => ({
+        node_id: nr.node_id || nr.id, type: nr.type, label: nr.label, status: nr.status, duration_ms: nr.duration_ms, output: nr.output, error: nr.error
+      }));
       if (result.success) {
-        const nodeResults = Object.values(result.node_results || {}).map(nr => ({
-          node_id: nr.node_id || nr.id, type: nr.type, label: nr.label, status: nr.status, duration_ms: nr.duration_ms, output: nr.output
-        }));
         appendWfTestMsg("assistant", `<pre style="margin:0; white-space:pre-wrap;">${esc(result.output || "")}</pre>`, nodeResults);
         wfTestHistory.push({ input: text, output: result.output || "", ok: true, ts: Date.now() });
       } else {
-        appendWfTestMsg("assistant", `<span style="color:#dc2626;">❌ ${esc(result.error || "运行失败")}</span>`);
-        wfTestHistory.push({ input: text, output: result.error || "运行失败", ok: false, ts: Date.now() });
+        const errInfo = result.error || "运行失败";
+        appendWfTestMsg("assistant", `<span style="color:#dc2626;">❌ ${esc(errInfo)}</span>`, nodeResults);
+        wfTestHistory.push({ input: text, output: errInfo, ok: false, ts: Date.now() });
       }
     } else {
       const reader = resp.body.getReader();
@@ -5717,7 +5719,7 @@ async function executeWfTestWithMessage(text) {
             } else if (evt.error) {
               clearWfNodeRunStates();
               if (thinkingEl) thinkingEl.remove();
-              appendWfTestMsg("assistant", `<span style="color:#dc2626;">❌ ${esc(evt.error)}</span>`);
+              appendWfTestMsg("assistant", `<span style="color:#dc2626;">❌ ${esc(evt.error)}</span>`, Object.values(nodeEventMap));
               wfTestHistory.push({ input: text, output: evt.error, ok: false, ts: Date.now() });
             }
           } catch(e) {}
@@ -6554,6 +6556,7 @@ function toggleThinking() {
 
 function syncThinkingUI() {
   const active = state.tbThinking;
+  localStorage.setItem("abcode-thinking", active ? "true" : "false");
   const badge = $("#thinking-toggle");
   if (badge) badge.classList.toggle("active", active);
   $$(".tb-toggle[data-tb='thinking']").forEach((b) => b.classList.toggle("active", active));
@@ -6820,6 +6823,16 @@ function bindEvents() {
       // 同步顶栏开关
       const agentSwitch = document.getElementById("agent-switch");
       if (agentSwitch) agentSwitch.checked = state.agentEnabled;
+    });
+  }
+
+  // 思考模式设置（设置面板内）
+  const thinkingTogglePref = document.getElementById("thinking-toggle-pref");
+  if (thinkingTogglePref) {
+    thinkingTogglePref.checked = state.tbThinking;
+    thinkingTogglePref.addEventListener("change", () => {
+      state.tbThinking = thinkingTogglePref.checked;
+      syncThinkingUI();
     });
   }
 
