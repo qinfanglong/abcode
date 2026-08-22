@@ -5014,6 +5014,27 @@ async function exportCurrentWorkflowDSL() {
   }
 }
 
+// 导出 Dify / 百炼 DSL（zip）
+async function exportDifyWorkflowDSL() {
+  if (!currentWorkflow || !currentWorkflow.id) {
+    alert("请先保存工作流再导出");
+    return;
+  }
+  try {
+    const res = await api(`/api/workflows/${currentWorkflow.id}/export_dify`);
+    const blob = new Blob([res], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const filename = (res.filename || `workflow_${currentWorkflow.id}.zip`);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("导出失败: " + e.message);
+  }
+}
+
 // 导入工作流 DSL
 async function importWorkflowDSL(input) {
   const file = input.files && input.files[0];
@@ -5047,6 +5068,33 @@ async function importWorkflowDSL(input) {
     input.value = "";
   }
 }
+
+// 导入 Dify / 百炼 DSL（支持 .yml / .yaml / .zip）
+async function importDifyWorkflowDSL(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const result = await fetch("/api/workflows/import_dify", {
+      method: "POST",
+      body: form,
+    });
+    const data = await result.json();
+    if (data && data.id) {
+      alert("导入成功！工作流 ID: " + data.id);
+      await loadWorkflowList();
+      openWorkflowEditor(data.id);
+    } else {
+      alert("导入失败：" + (data && data.detail ? JSON.stringify(data.detail) : "未返回工作流 ID"));
+    }
+  } catch (e) {
+    alert("导入失败: " + e.message);
+  } finally {
+    input.value = "";
+  }
+}
+<<<TRUNCATED>>
 
 // 保存工作流
 async function saveCurrentWorkflow() {

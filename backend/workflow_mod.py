@@ -366,6 +366,16 @@ class WorkflowEngine:
                 content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{raw}"}})
         return content
 
+    def _render_deep(self, value):
+        """递归渲染 dict/list/str 中的 {{var}} 占位符"""
+        if isinstance(value, dict):
+            return {k: self._render_deep(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._render_deep(v) for v in value]
+        if isinstance(value, str):
+            return render_template(value, self.variables)
+        return value
+
     def _store_output(self, node_id, output, output_var=None):
         """把节点输出存到变量，支持指定变量名"""
         out_name = (output_var or "").strip() or (node_id + "_output")
@@ -691,6 +701,9 @@ class WorkflowEngine:
                 arguments = json.loads(arguments) if arguments.strip() else {}
             except Exception:
                 arguments = {"input": arguments}
+        else:
+            # dict/list 递归渲染模板占位符
+            arguments = self._render_deep(arguments)
         if not mcp_server or not tool_name:
             raise RuntimeError("MCP 调用缺少服务器或工具名")
 
@@ -708,8 +721,16 @@ class WorkflowEngine:
         if not ok:
             raise RuntimeError(f"MCP 调用失败: {result}")
         output = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+        output_variable = config.get("output_variable", node["id"] + "_output")
+        req_duration = int((time.time() - self.nodes_status[node["id"]]["started_at"]) * 1000)
+        self.node_requests[node["id"]] = {
+            "request": {"mcp_server": mcp_server, "tool_name": tool_name, "arguments": arguments},
+            "response": {"result": output[:2000]},
+            "duration_ms": req_duration,
+            "type": "mcp_call",
+        }
         self.variables[node["id"] + "_result"] = result
-        self._store_output(node["id"], output)
+        self._store_output(node["id"], output, output_var=output_variable)
         return output
 
     def _execute_json_parse(self, node, config):

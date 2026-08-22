@@ -436,8 +436,11 @@
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn-test" onclick="exportCurrentWorkflowDSL()">📤 导出 DSL</button>
+            <button class="btn-test" onclick="exportDifyWorkflowDSL()">🧧 导出 Dify/百炼</button>
             <button class="btn-test" onclick="document.getElementById('wf-import-file-editor').click()">📥 导入 DSL</button>
             <input type="file" id="wf-import-file-editor" accept="application/json,.json" style="display:none" onchange="importWorkflowDSL(this)">
+            <button class="btn-test" onclick="document.getElementById('wf-import-dify-file-editor').click()">🧧 导入 Dify/百炼</button>
+            <input type="file" id="wf-import-dify-file-editor" accept=".yml,.yaml,.zip,application/zip,text/yaml,application/x-yaml" style="display:none" onchange="importDifyWorkflowDSL(this)">
             <button class="btn-test" onclick="saveCurrentWorkflow()">💾 保存</button>
             <button class="btn-save" id="wf-test-toggle-btn" onclick="toggleTestPanel()">▶ 测试</button>
           </div>

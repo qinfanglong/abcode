@@ -7,6 +7,9 @@ import uuid
 import random
 import string
 import mimetypes
+import io
+import zipfile
+import yaml
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -1675,6 +1678,67 @@ def api_import_workflow_dsl_new(body: dict = Body(...)):
     return {"ok": True, "id": wf_id}
 
 
+@app.post("/api/workflows/import_dify")
+async def api_import_workflow_dify(file: UploadFile = File(...)):
+    """导入 Dify / 百炼 DSL（支持 .yml / .yaml 或 .zip）"""
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    try:
+        if suffix == ".zip":
+            content = await file.read()
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                # 优先找根目录下的 yaml/yml
+                yaml_names = [n for n in zf.namelist() if n.endswith(".yaml") or n.endswith(".yml")]
+                if not yaml_names:
+                    raise HTTPException(400, "zip 中未找到 .yaml/.yml 文件")
+                yaml_name = yaml_names[0]
+                with zf.open(yaml_name) as f:
+                    dify_data = yaml.safe_load(f)
+        else:
+            text = (await file.read()).decode("utf-8", errors="ignore")
+            dify_data = yaml.safe_load(text)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"解析失败: {e}")
+    if not isinstance(dify_data, dict):
+        raise HTTPException(400, "无效的 DSL 格式")
+    abcode_dsl = dify_yaml_to_abcode(dify_data)
+    wf_id = _gen_wf_id()
+    wf = _dsl_to_wf(abcode_dsl, wf_id)
+    wf["name"] = abcode_dsl.get("name") or "导入的工作流"
+    wf["description"] = abcode_dsl.get("description", "") or ""
+    wf["tags"] = abcode_dsl.get("tags", []) or []
+    wf["created_at"] = abcode_dsl.get("created_at", time.time())
+    wf["updated_at"] = abcode_dsl.get("updated_at", time.time())
+    db.save_workflow(wf)
+    return {"ok": True, "id": wf_id}
+
+
+@app.get("/api/workflows/{wid}/export_dify")
+def api_export_workflow_dify(wid: str):
+    """导出工作流为 Dify / 百炼兼容 DSL zip"""
+    wf = db.get_workflow(wid)
+    if not wf:
+        raise HTTPException(404, "工作流不存在")
+    dsl = abcode_to_dify_yaml(wf)
+    # 用 UUID 避免不同工作流下载文件名冲突
+    uid = uuid.uuid4().hex[:8]
+    zip_name = f"workflow_{wid}_{uid}.zip"
+    inner_name = f"workflow_{wid}.yml"
+    tmp_dir = UPLOAD_DIR / "_dify_export"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = tmp_dir / zip_name
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(inner_name, yaml.safe_dump(dsl, allow_unicode=True, sort_keys=False))
+    return FileResponse(
+        zip_path,
+        filename=zip_name,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={zip_name}"},
+    )
+
+
 @app.get("/api/workflows/{wid}")
 def api_get_workflow(wid: str):
     """获取工作流详情"""
@@ -1723,6 +1787,377 @@ def _gen_wf_id(length=15):
     """生成15位随机工作流ID（字母+数字）"""
     chars = string.ascii_lowercase + string.digits
     return "wf_" + "".join(random.choices(chars, k=length))
+
+
+# ================= Dify / 百炼 DSL 转换 =================
+
+_DIFY_NODE_TYPE_MAP = {
+    "start": "start",
+    "end": "end",
+    "answer": "stop",
+    "llm": "llm",
+    "code": "code",
+    "http-request": "http",
+    "http request": "http",
+    "knowledge-retrieval": "kb_search",
+    "knowledge retrieval": "kb_search",
+    "if-else": "condition",
+    "if else": "condition",
+    "variable-aggregator": "aggregator",
+    "variable aggregator": "aggregator",
+    "iteration": "iteration",
+    "template-transform": "template",
+    "template transform": "template",
+    "question-classifier": "classifier",
+    "question classifier": "classifier",
+    "parameter-extractor": "extractor",
+    "parameter extractor": "extractor",
+    "tool": "tool",
+}
+
+
+def _normalize_node_type(t: str) -> str:
+    if not t:
+        return "unknown"
+    key = t.strip().lower()
+    return _DIFY_NODE_TYPE_MAP.get(key, t)
+
+
+def _dify_vars_to_abcode_input(variables):
+    """Dify start 节点 variables -> ABcode start config input_variables"""
+    if not variables:
+        return []
+    out = []
+    for v in variables:
+        out.append({
+            "name": v.get("variable", v.get("name", "")),
+            "type": v.get("type", "string"),
+            "required": bool(v.get("required", False)),
+            "default": v.get("default", "") or "",
+            "options": v.get("options") or [],
+            "label": v.get("label", ""),
+            "max_length": v.get("max_length"),
+        })
+    return out
+
+
+def _abcode_input_to_dify_vars(input_variables):
+    """ABcode start config -> Dify start 节点 variables"""
+    if not input_variables:
+        return []
+    out = []
+    for v in input_variables:
+        out.append({
+            "variable": v.get("name", ""),
+            "label": v.get("label") or v.get("name", ""),
+            "type": v.get("type", "string"),
+            "required": bool(v.get("required", False)),
+            "default": v.get("default", "") or "",
+            "options": v.get("options") or [],
+            "max_length": v.get("max_length") or 1024,
+        })
+    return out
+
+
+def _dify_node_to_abcode(n):
+    """Dify graph node -> ABcode node"""
+    data = n.get("data", {}) or {}
+    node_type = _normalize_node_type(data.get("type", ""))
+    node_id = str(n.get("id", ""))
+    if not node_id:
+        node_id = _gen_wf_id()
+    label = data.get("title", data.get("label", "")) or node_type
+    cfg = {}
+    # 通用映射
+    if node_type == "start":
+        cfg = {
+            "input_variables": _dify_vars_to_abcode_input(data.get("variables", [])),
+        }
+    elif node_type == "llm":
+        cfg = {
+            "prompt": data.get("prompt_template", data.get("prompt", "")),
+            "model": data.get("model", {}).get("name", "") if isinstance(data.get("model"), dict) else data.get("model", ""),
+            "model_source": data.get("model_source", "cloud"),
+            "output_variable": data.get("output_variable", "output"),
+        }
+    elif node_type == "code":
+        code_cfg = data.get("code", {}) or data.get("python", {}) or {}
+        cfg = {
+            "language": data.get("language", "python"),
+            "code": code_cfg.get("code", code_cfg.get("source", "")),
+            "output_variable": data.get("output_variable", "code_output"),
+        }
+    elif node_type == "http":
+        cfg = {
+            "method": data.get("method", "GET"),
+            "url": data.get("url", ""),
+            "headers": data.get("headers", {}) or {},
+            "body": data.get("body", ""),
+            "output_variable": data.get("output_variable", "http_response"),
+        }
+    elif node_type == "kb_search":
+        cfg = {
+            "query": data.get("query", ""),
+            "top_k": int(data.get("top_k", 3)),
+            "kb_id": data.get("kb_id", data.get("dataset_id", "default")),
+            "output_variable": data.get("output_variable", "kb_results"),
+        }
+    elif node_type == "condition":
+        cfg = {
+            "variable": data.get("variable", data.get("conditions", [{}])[0].get("variable", "") if data.get("conditions") else ""),
+            "conditions": data.get("conditions", []),
+            "output_variable": data.get("output_variable", "cond_result"),
+        }
+    elif node_type == "aggregator":
+        cfg = {
+            "mode": data.get("mode", "json"),
+            "variables": data.get("variables", []),
+            "output_variable": data.get("output_variable", "agg_result"),
+        }
+    elif node_type == "template":
+        cfg = {
+            "template": data.get("template", ""),
+            "output_variable": data.get("output_variable", "template_output"),
+        }
+    elif node_type == "classifier":
+        cfg = {
+            "input": data.get("query_variable_selector", [""])[-1] if data.get("query_variable_selector") else data.get("input", ""),
+            "categories": [c.get("name", c) for c in data.get("classes", [])] if isinstance(data.get("classes"), list) else data.get("categories", []),
+            "conditions": data.get("conditions", []),
+            "model": data.get("model", {}).get("name", "") if isinstance(data.get("model"), dict) else data.get("model", ""),
+            "model_source": data.get("model_source", "cloud"),
+            "output_variable": data.get("output_variable", "classifier_result"),
+        }
+    elif node_type == "extractor":
+        cfg = {
+            "input": data.get("query_variable_selector", [""])[-1] if data.get("query_variable_selector") else data.get("input", ""),
+            "fields": data.get("parameters", []),
+            "model": data.get("model", {}).get("name", "") if isinstance(data.get("model"), dict) else data.get("model", ""),
+            "model_source": data.get("model_source", "cloud"),
+            "output_variable": data.get("output_variable", "extracted"),
+        }
+    elif node_type == "tool":
+        cfg = {
+            "tool_name": data.get("tool_name", data.get("tool", {}).get("name", "")),
+            "arguments": data.get("tool_parameters", data.get("arguments", {})) or {},
+            "output_variable": data.get("output_variable", "tool_result"),
+        }
+    elif node_type == "stop":
+        cfg = {
+            "output_field": data.get("output_field", "output"),
+        }
+    else:
+        cfg = data.get("config", {}) or data
+    return {
+        "id": node_id,
+        "type": node_type,
+        "label": label,
+        "config": cfg,
+    }
+
+
+def _dify_edge_to_abcode(e):
+    """Dify graph edge -> ABcode edge"""
+    return {
+        "id": str(e.get("id", _gen_wf_id())),
+        "source": str(e.get("source", "")),
+        "target": str(e.get("target", "")),
+        "sourceHandle": e.get("sourceHandle"),
+        "targetHandle": e.get("targetHandle"),
+        "label": e.get("label"),
+        "condition": e.get("condition"),
+    }
+
+
+def dify_yaml_to_abcode(dify_yaml_data):
+    """Dify / 百炼 DSL YAML -> ABcode DSL"""
+    app_cfg = dify_yaml_data.get("app", {}) or {}
+    workflow = dify_yaml_data.get("workflow", {}) or {}
+    graph = workflow.get("graph", {}) or {}
+    raw_nodes = graph.get("nodes", []) or []
+    raw_edges = graph.get("edges", []) or []
+    nodes = [_dify_node_to_abcode(n) for n in raw_nodes]
+    edges = [_dify_edge_to_abcode(e) for e in raw_edges]
+    now = time.time()
+    return {
+        "version": "1.0",
+        "name": app_cfg.get("name", workflow.get("name", "导入的工作流")),
+        "description": app_cfg.get("description", "") or workflow.get("description", "") or "",
+        "tags": workflow.get("tags", []) or [],
+        "enabled": True,
+        "graph": {
+            "nodes": nodes,
+            "edges": edges,
+        },
+        "meta": {
+            "exported_at": now,
+            "format": "dify-dsl-v1",
+            "compatible": ["dify", "bailian"],
+        },
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _abcode_node_to_dify(n):
+    """ABcode node -> Dify graph node"""
+    node_type = n.get("type", "unknown")
+    node_id = str(n.get("id", ""))
+    label = n.get("label", node_type)
+    cfg = n.get("config", {}) or {}
+    data = {
+        "type": node_type,
+        "title": label,
+        "desc": "",
+    }
+    if node_type == "start":
+        data["variables"] = _abcode_input_to_dify_vars(cfg.get("input_variables", []))
+    elif node_type == "end":
+        data["output_field"] = cfg.get("output_field", "output")
+    elif node_type == "stop":
+        data["output_field"] = cfg.get("output_field", "output")
+    elif node_type == "llm":
+        data["model"] = cfg.get("model", "")
+        data["model_source"] = cfg.get("model_source", "cloud")
+        data["prompt_template"] = cfg.get("prompt", "")
+        data["output_variable"] = cfg.get("output_variable", "output")
+    elif node_type == "code":
+        data["language"] = cfg.get("language", "python")
+        data.setdefault("code", {})
+        data["code"]["code"] = cfg.get("code", "")
+        data["code"]["mode"] = "python"
+        data["output_variable"] = cfg.get("output_variable", "code_output")
+    elif node_type == "http":
+        data["method"] = cfg.get("method", "GET")
+        data["url"] = cfg.get("url", "")
+        data["headers"] = cfg.get("headers", {}) or {}
+        data["body"] = cfg.get("body", "")
+        data["output_variable"] = cfg.get("output_variable", "http_response")
+    elif node_type == "kb_search":
+        data["query"] = cfg.get("query", "")
+        data["top_k"] = int(cfg.get("top_k", 3))
+        data["dataset_id"] = cfg.get("kb_id", "default")
+        data["output_variable"] = cfg.get("output_variable", "kb_results")
+    elif node_type == "condition":
+        data["variable"] = cfg.get("variable", "")
+        data["conditions"] = cfg.get("conditions", [])
+        data["output_variable"] = cfg.get("output_variable", "cond_result")
+    elif node_type == "aggregator":
+        data["mode"] = cfg.get("mode", "json")
+        data["variables"] = cfg.get("variables", [])
+        data["output_variable"] = cfg.get("output_variable", "agg_result")
+    elif node_type == "template":
+        data["template"] = cfg.get("template", "")
+        data["output_variable"] = cfg.get("output_variable", "template_output")
+    elif node_type == "classifier":
+        data["classes"] = [{"id": c, "name": c} for c in (cfg.get("categories", []) or [])]
+        data["conditions"] = cfg.get("conditions", [])
+        data["model"] = cfg.get("model", "")
+        data["model_source"] = cfg.get("model_source", "cloud")
+        data["query_variable_selector"] = [cfg.get("input", "")]
+        data["output_variable"] = cfg.get("output_variable", "classifier_result")
+    elif node_type == "extractor":
+        data["parameters"] = cfg.get("fields", [])
+        data["model"] = cfg.get("model", "")
+        data["model_source"] = cfg.get("model_source", "cloud")
+        data["query_variable_selector"] = [cfg.get("input", "")]
+        data["output_variable"] = cfg.get("output_variable", "extracted")
+    elif node_type == "tool":
+        data["tool_name"] = cfg.get("tool_name", "")
+        data["tool_parameters"] = cfg.get("arguments", {}) or {}
+        data["output_variable"] = cfg.get("output_variable", "tool_result")
+    else:
+        # 未知节点类型尽量保留 config
+        data.update(cfg)
+    return {
+        "id": node_id,
+        "type": "custom",
+        "position": {"x": 0, "y": 0},
+        "positionAbsolute": {"x": 0, "y": 0},
+        "selected": False,
+        "sourcePosition": "right",
+        "targetPosition": "left",
+        "width": 244,
+        "height": 90,
+        "data": data,
+    }
+
+
+def _abcode_edge_to_dify(e):
+    """ABcode edge -> Dify graph edge"""
+    return {
+        "id": str(e.get("id", _gen_wf_id())),
+        "source": str(e.get("source", "")),
+        "target": str(e.get("target", "")),
+        "sourceHandle": e.get("sourceHandle") or "source",
+        "targetHandle": e.get("targetHandle") or "target",
+        "type": "custom",
+        "selected": False,
+        "zIndex": 0,
+        "data": {
+            "isInIteration": False,
+            "sourceType": "custom",
+            "targetType": "custom",
+        },
+    }
+
+
+def abcode_to_dify_yaml(abcode_wf):
+    """ABcode 工作流 -> Dify / 百炼 DSL YAML"""
+    nodes = abcode_wf.get("nodes", [])
+    edges = abcode_wf.get("edges", [])
+    dify_nodes = [_abcode_node_to_dify(n) for n in nodes]
+    dify_edges = [_abcode_edge_to_dify(e) for e in edges]
+    dsl = {
+        "app": {
+            "name": abcode_wf.get("name", "ABcode 工作流"),
+            "description": abcode_wf.get("description", "") or "",
+            "icon": "🤖",
+            "icon_background": "#FFEAD5",
+            "mode": "workflow",
+            "kind": "app",
+            "version": "0.7.0",
+            "use_icon_as_answer_icon": False,
+        },
+        "workflow": {
+            "conversation_variables": [],
+            "environment_variables": [],
+            "features": {
+                "file_upload": {
+                    "enabled": False,
+                    "image": {
+                        "enabled": False,
+                        "number_limits": 3,
+                        "transfer_methods": ["local_file", "remote_url"],
+                    },
+                },
+                "opening_statement": "",
+                "retriever_resource": {
+                    "enabled": True,
+                },
+                "sensitive_word_avoidance": {
+                    "enabled": False,
+                },
+                "speech_to_text": {
+                    "enabled": False,
+                },
+                "suggested_questions": [],
+                "suggested_questions_after_answer": {
+                    "enabled": False,
+                },
+                "text_to_speech": {
+                    "enabled": False,
+                    "language": "",
+                    "voice": "",
+                },
+            },
+            "graph": {
+                "nodes": dify_nodes,
+                "edges": dify_edges,
+            },
+        },
+    }
+    return dsl
 
 
 @app.post("/api/workflows")
