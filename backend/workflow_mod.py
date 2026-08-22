@@ -377,12 +377,94 @@ class WorkflowEngine:
     # ================= 节点执行 =================
 
     def _execute_start(self, node, config):
-        input_fields = config.get("input_fields", [])
+        """开始节点：收集入参。
+
+        支持结构化参数定义：
+          input_variables: [{ name, type(string/text/number/integer/float/boolean/select/multi_select/date/datetime/time/file/password/email/url/object/array),
+                              default, required, options[] }]
+        向后兼容 legacy 的 input_fields（逗号分隔字符串列表），统一作为 string 处理。
+        """
         out = {}
-        for f in input_fields:
+
+        # 结构化参数（优先）
+        for f in config.get("input_variables") or []:
+            name = (f.get("name") or "").strip()
+            if not name:
+                continue
+            ftype = f.get("type", "string") or "string"
+            required = bool(f.get("required", False))
+            default = f.get("default", "")
+            options = f.get("options") or []
+
+            value = self.variables.get(name)
+            if value is None or value == "":
+                value = default
+            if value is None or value == "":
+                if required:
+                    raise RuntimeError(f"开始节点缺少必填参数: {name}")
+                value = ""
+
+            value = self._cast_input(value, ftype, options)
+            out[name] = value
+
+        # 向后兼容 legacy input_fields
+        for f in (config.get("input_fields") or []):
+            if f in out:
+                continue
             out[f] = self.variables.get(f, self.variables.get("input", ""))
-        # 如果只有 input 字段，直接透传
+
+        # 若未定义任何字段，透传整个 input
+        if not out:
+            out["input"] = self.variables.get("input", "")
         return out
+
+    @staticmethod
+    def _cast_input(value, ftype, options=None):
+        """根据类型对输入做强制/校验。支持：string/text/number/integer/float/boolean/select/multi_select/date/datetime/time/file/password/email/url/object/array"""
+        options = options or []
+        if value is None or value == "":
+            return value
+        # 已是对象/数组原样保留（如 object/array 类型）
+        if isinstance(value, (dict, list)):
+            if ftype == "object" and isinstance(value, dict):
+                return value
+            if ftype == "array" and isinstance(value, list):
+                return value
+            return value
+        try:
+            if ftype == "number":
+                s = str(value).strip()
+                if "." in s or "e" in s.lower():
+                    return float(s)
+                return int(s)
+            elif ftype == "integer":
+                return int(str(value).strip())
+            elif ftype == "float":
+                return float(str(value).strip())
+            elif ftype == "boolean":
+                if isinstance(value, str):
+                    return value.lower() in ("true", "1", "yes", "on", "是")
+                return bool(value)
+            elif ftype == "select" and options:
+                if str(value) not in [str(o) for o in options]:
+                    return options[0]
+                return value
+            elif ftype == "multi_select":
+                if isinstance(value, list):
+                    return [str(v) for v in value]
+                return [v.strip() for v in str(value).split(",") if v.strip()]
+            elif ftype in ("date", "datetime", "time", "file",
+                          "password", "email", "url", "text", "string"):
+                return str(value)
+            elif ftype == "object":
+                import json as _json
+                return _json.loads(str(value))
+            elif ftype == "array":
+                import json as _json
+                return _json.loads(str(value))
+        except Exception:
+            return value
+        return value
 
     def _execute_end(self, node, config):
         output_field = config.get("output_field", "output")
@@ -660,7 +742,13 @@ class WorkflowEngine:
         smtp_user = db.get_setting("smtp_user", "")
         smtp_pass = db.get_setting("smtp_pass", "")
         from_addr = db.get_setting("smtp_from", smtp_user)
+
+        # 无 SMTP 配置时：根据 dry_run 决定行为
         if not smtp_host or not smtp_user or not smtp_pass:
+            if config.get("dry_run", False):
+                output = f"[dry_run] 已生成邮件（未发送）：收件人={to}，主题={subject}"
+                self._store_output(node["id"], output)
+                return output
             raise RuntimeError("未配置 SMTP，请先到设置中配置邮箱")
 
         import smtplib

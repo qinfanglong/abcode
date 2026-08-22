@@ -23,7 +23,7 @@ let state = {
   chatKbId: localStorage.getItem("abcode-chat-kb") || "",
   tbSkills: true,
   tbMcp: true,
-  tbThinking: false,
+  tbThinking: localStorage.getItem("abcode-thinking") === "true",
   // 界面偏好（语言/时区）
   lang: localStorage.getItem("abcode-lang") || "zh-CN",
   timezone: localStorage.getItem("abcode-timezone") || "",
@@ -53,7 +53,11 @@ async function init() {
   applyFontSettings();
   applySuggestionSettings();
   applyParticleAnimationSettings();
-  await Promise.all([loadProviders(), loadConvs()]);
+  try {
+    await Promise.all([loadProviders(), loadConvs()]);
+  } catch (e) {
+    console.warn("初始化数据加载失败，仍继续绑定事件:", e);
+  }
   bindEvents();
   // 首次加载失败时重试（后端可能尚未就绪；占位符也算失败）
   if (state.providers.length > 0) {
@@ -4361,10 +4365,30 @@ function showNodeConfig(nodeId) {
   let html = "";
   switch (node.type) {
     case "start":
-      html += `<div class="ncf-section"><div class="ncf-group-title">输入参数</div>
-        <div class="ncf-row"><label class="ncf-label">输入字段（逗号分隔）</label>
-        <input class="ncf-input" value="${esc((cfg.input_fields || []).join(', '))}" onchange="updateNodeConfig('input_fields', this.value.split(',').map(s=>s.trim()).filter(Boolean))"></div>
-        <div class="ncf-hint">定义工作流的输入参数，后续节点可通过 {{字段名}} 引用。</div></div>`;
+      html += `<div class="ncf-section"><div class="ncf-group-title">入参参数配置</div>
+        <div class="ncf-hint" style="margin-bottom:10px;">定义工作流的输入参数，支持类型、默认值、必填与选项；后续节点可通过 {{字段名}} 引用。</div>
+        <div id="start-params-table" style="width:100%;">
+          ${(cfg.input_variables || []).map((v, idx) => {
+            const opts = (v.options || []).join(',');
+            return (() => { const g = getGroupByType(v.type); const secondTypes = TYPE_GROUPS[g]?.types || []; return `
+            <div style="display:grid;grid-template-columns:1fr 56px 75px 100px 70px 110px 28px;gap:6px;align-items:center;margin-bottom:6px;" data-start-idx="${idx}">
+              <input class="ncf-input" value="${esc(v.name||'')}" placeholder="参数名" onchange="updateStartVar(${idx},'name',this.value)">
+              <select class="ncf-select type-group-select" style="width:56px;" onchange="updateStartVarGroup(${idx}, this.value)">
+                ${Object.entries(TYPE_GROUPS).map(([k,v])=>`<option value="${k}" ${k===g?'selected':''}>${v.label}</option>`).join('')}
+              </select>
+              <select class="ncf-select type-second-select" style="width:75px;" onchange="updateStartVar(${idx},'type',this.value)">
+                ${secondTypes.map(t=>`<option value="${t}" ${v.type===t?'selected':''}>${t}</option>`).join('')}
+              </select>
+              <input class="ncf-input" value="${esc(v.default||'')}" placeholder="默认值" onchange="updateStartVar(${idx},'default',this.value)">
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" ${v.required?'checked':''} onchange="updateStartVar(${idx},'required',this.checked)">必填</label>
+              <input class="ncf-input" value="${esc(opts)}" placeholder="选项(逗号分隔)" onchange="updateStartVar(${idx},'options',this.value.split(',').map(s=>s.trim()).filter(Boolean))">
+              <button onclick="removeStartVar(${idx})" style="width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:#ef4444;cursor:pointer;font-size:14px;">✕</button>
+            </div>`; })();
+          }).join('')}
+        </div>
+        <button onclick="addStartVar()" style="padding:6px 12px;border:1px dashed #d1d5db;border-radius:8px;background:transparent;color:#6b7280;cursor:pointer;font-size:13px;width:100%;margin-top:6px;">+ 添加参数</button>
+        <div class="ncf-hint" style="margin-top:8px;">也兼容旧版「输入字段（逗号分隔）」：<input class="ncf-input" style="width:260px;margin-top:6px;" value="${esc((cfg.input_fields || []).join(', '))}" onchange="updateNodeConfig('input_fields', this.value.split(',').map(s=>s.trim()).filter(Boolean))"></div>
+      </div>`;
       break;
     case "end":
       html += `<div class="ncf-section"><div class="ncf-group-title">输出配置</div>
@@ -4940,7 +4964,7 @@ function addWfNode(type) {
 // 获取默认节点配置
 function getDefaultNodeConfig(type) {
   switch (type) {
-    case "start": return { input_fields: ["input"] };
+    case "start": return { input_fields: ["input"], input_variables: [] };
     case "end": return { output_field: "output", result_template: "" };
     case "llm": return { prompt: "", model: "", model_source: "local", system: "", temperature: 0.7, memory_mode: "none", output_variable: "", retry: false };
     case "kb_search": return { query: "{{input}}", top_k: 5, kb_id: "", threshold: 0, output_variable: "" };
@@ -4967,6 +4991,60 @@ function getDefaultNodeConfig(type) {
     case "email": return { to: "", subject: "", body: "", attachments: [] };
     case "webhook": return { url: "", method: "POST", headers: {}, body: "" };
     default: return {};
+  }
+}
+
+// 导出工作流 DSL
+async function exportCurrentWorkflowDSL() {
+  if (!currentWorkflow || !currentWorkflow.id) {
+    alert("请先保存工作流再导出");
+    return;
+  }
+  try {
+    const res = await api(`/api/workflows/${currentWorkflow.id}/export`);
+    const blob = new Blob([JSON.stringify(res, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `workflow_${currentWorkflow.id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("导出失败: " + e.message);
+  }
+}
+
+// 导入工作流 DSL
+async function importWorkflowDSL(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const dsl = JSON.parse(text);
+    // 兼容直接导入或通过新工作流接口
+    let result;
+    if (dsl.id && dsl.nodes && dsl.edges) {
+      result = await api(`/api/workflows/${dsl.id}/import`, {
+        method: "POST",
+        body: JSON.stringify(dsl),
+      });
+    } else {
+      result = await api("/api/workflows/import", {
+        method: "POST",
+        body: JSON.stringify(dsl),
+      });
+    }
+    if (result && result.id) {
+      alert("导入成功！工作流 ID: " + result.id);
+      await loadWorkflowList();
+      openWorkflowEditor(result.id);
+    } else {
+      alert("导入失败：未返回工作流 ID");
+    }
+  } catch (e) {
+    alert("导入失败: " + e.message);
+  } finally {
+    input.value = "";
   }
 }
 
@@ -5203,7 +5281,7 @@ async function showWfObservation(wfId) {
   }
 }
 
-// ===== 工作流测试面板（百炼风格） =====
+// ===== 工作流测试面板 =====
 let wfTestFiles = [];
 let wfTestVars = [];
 let testPanelOpen = false;
@@ -5520,15 +5598,32 @@ function finishWfTestRun() {
 }
 
 async function executeWfTestWithMessage(text) {
-  // 收集输入
+  window._wfLastTestText = text;
+  // 收集输入（优先使用已保存的入参值；否则按 legacy 透传）
   const startNode = currentWorkflow.nodes.find(n => n.type === "start");
-  const fields = (startNode?.config?.input_fields) || ["input"];
-  const inputData = {};
-  if (fields.length === 1) {
-    inputData[fields[0]] = text;
-  } else {
-    fields.forEach(f => { inputData[f] = text; });
+  const legacyFields = (startNode?.config?.input_fields) || ["input"];
+  const saved = window._wfInputValues || {};
+
+  // 若当前工作流有复杂 start 节点 schema，先弹出配置面板
+  // （跳过标记：当次已从面板回流，避免无限弹窗）
+  const skipModal = window.__wfSkipInputModal;
+  delete window.__wfSkipInputModal;
+  if (currentWorkflow && !skipModal) {
+    let schema = null;
+    try { schema = await api(`/api/workflows/${currentWorkflow.id}/input_schema`); } catch (e) { /* ignore */ }
+    const fields = (schema && schema.fields) || [];
+    const simple = fields.length === 1 && fields[0].name === "input" && fields[0].type === "string" && !fields[0].required;
+    if (fields.length && !simple) {
+      openWfInputConfig();
+      return;
+    }
   }
+
+  const inputData = {};
+  for (const f of legacyFields) {
+    inputData[f] = saved[f] != null ? saved[f] : text;
+  }
+  if (!legacyFields.length) inputData["input"] = text;
   // 读取文件为 base64
   const attachments = [];
   for (const file of wfTestFiles) {
@@ -5644,32 +5739,127 @@ async function executeWfTestWithMessage(text) {
   finishWfTestRun();
 }
 
-// 入参参数配置
-function openWfInputConfig() {
+// ============ 开始节点：结构化入参编辑（结构化入参编辑） ============
+const TYPE_GROUPS = {
+  text: { label: "文本", types: ["string", "text", "password", "email", "url"] },
+  number: { label: "数值", types: ["number", "integer", "float"] },
+  boolean: { label: "布尔", types: ["boolean"] },
+  choice: { label: "选择", types: ["select", "multi_select"] },
+  datetime: { label: "日期时间", types: ["date", "datetime", "time"] },
+  file: { label: "文件", types: ["file"] },
+  composite: { label: "复合", types: ["object", "array"] }
+};
+
+function getGroupByType(type) {
+  for (const [group, info] of Object.entries(TYPE_GROUPS)) {
+    if (info.types.includes(type)) return group;
+  }
+  return "";
+}
+
+function _ensureStartVars() {
+  if (!selectedNode || !currentWorkflow) return null;
+  const node = currentWorkflow.nodes.find(n => n.id === selectedNode);
+  if (!node || node.type !== "start") return null;
+  if (!node.config) node.config = {};
+  if (!node.config.input_variables) node.config.input_variables = [];
+  return node;
+}
+
+function updateStartVar(idx, key, value) {
+  const node = _ensureStartVars();
+  if (!node) return;
+  const list = node.config.input_variables;
+  if (idx < 0 || idx >= list.length) return;
+  list[idx][key] = value;
+  // 单独更新，不需要整面板重渲染（避免丢掉焦点）
+  node.config.input_variables = list;
+}
+
+function updateStartVarGroup(idx, group) {
+  const node = _ensureStartVars();
+  if (!node) return;
+  const list = node.config.input_variables;
+  if (idx < 0 || idx >= list.length) return;
+  const types = TYPE_GROUPS[group]?.types || [];
+  const newType = types[0] || "";
+  list[idx].type = newType;
+  // 更新该行第二级 select 的选项
+  const row = document.querySelector(`[data-start-idx="${idx}"]`);
+  if (row) {
+    const secondSelect = row.querySelector('.type-second-select');
+    if (secondSelect) {
+      secondSelect.innerHTML = types.map(t => `<option value="${t}" ${t === newType ? 'selected' : ''}>${t}</option>`).join('');
+    }
+  }
+  node.config.input_variables = list;
+}
+
+function addStartVar() {
+  const node = _ensureStartVars();
+  if (!node) return;
+  node.config.input_variables.push({ name: "", type: "string", default: "", required: false, options: [] });
+  showNodeConfig(selectedNode);
+}
+
+function removeStartVar(idx) {
+  const node = _ensureStartVars();
+  if (!node) return;
+  node.config.input_variables.splice(idx, 1);
+  showNodeConfig(selectedNode);
+}
+
+// ============ 运行前入参表单（动态渲染，按 start 节点 schema） ============
+async function openWfInputConfig() {
   const startNode = currentWorkflow?.nodes.find(n => n.type === "start");
-  const fields = (startNode?.config?.input_fields) || ["input"];
+  if (!startNode) { alert("工作流缺少开始节点"); return; }
+  let fields = [];
+  try {
+    const schema = await api(`/api/workflows/${currentWorkflow.id}/input_schema`);
+    fields = (schema && schema.fields) || [];
+  } catch (e) {
+    fields = (startNode.config?.input_variables || []).map(v => ({
+      name: v.name, type: v.type || "string", default: v.default || "",
+      required: !!v.required, options: v.options || []
+    }));
+  }
+  if (!fields.length) fields = [{ name: "input", type: "string", default: "", required: false, options: [] }];
+
+  const prev = window._wfInputValues || {};
+  const rows = fields.map(f => {
+    const id = "wf_inp_" + f.name;
+    const val = prev[f.name] != null ? prev[f.name] : f.default;
+    let ctrl;
+    if (f.type === "boolean") {
+      ctrl = `<input type="checkbox" id="${id}" ${val ? "checked" : ""} style="width:18px;height:18px;">`;
+    } else if (f.type === "number") {
+      ctrl = `<input type="number" id="${id}" value="${esc(val)}" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">`;
+    } else if (f.type === "select" && (f.options || []).length) {
+      ctrl = `<select id="${id}" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
+        ${f.options.map(o => `<option value="${esc(o)}" ${(val === o) ? "selected" : ""}>${esc(o)}</option>`).join('')}
+      </select>`;
+    } else {
+      ctrl = `<input type="text" id="${id}" value="${esc(val)}" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">`;
+    }
+    const reqTag = f.required ? ` <span style="color:#ef4444;">*</span>` : "";
+    return `<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+      <div style="width:140px;font-size:13px;font-weight:500;color:#374151;">${esc(f.name)}${reqTag}<div style="font-size:11px;color:#9ca3af;">${esc(f.type)}</div></div>
+      ${ctrl}
+    </div>`;
+  }).join('');
+
   const html = `<div class="wf-config-modal open" id="wf-input-config-modal">
     <div class="wf-config-header">
-      <h3>入参变量配置</h3>
+      <h3>入参变量配置（运行前填写）</h3>
       <button onclick="closeWfInputConfig()" style="width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:#6b7280;cursor:pointer;font-size:18px;">✕</button>
     </div>
     <div class="wf-config-body">
-      <div style="margin-bottom:16px;">
-        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">内置变量</div>
-        ${fields.map(f => `<div style="padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
-          <div style="font-size:13px;font-weight:500;color:#1f2937;">${esc(f)} <span style="color:#6b7280;font-size:12px;">[string]</span></div>
-          <div style="font-size:12px;color:#6b7280;margin-top:4px;">用于传递输入参数</div>
-        </div>`).join('')}
-      </div>
-      <div style="margin-bottom:16px;">
-        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">自定义变量</div>
-        <div id="wf-input-custom-vars"></div>
-        <button onclick="addWfInputCustomVar()" style="padding:8px 16px;border:1px dashed #d1d5db;border-radius:8px;background:transparent;color:#6b7280;cursor:pointer;font-size:13px;width:100%;margin-top:8px;">+ 添加变量</button>
-      </div>
+      <div class="wf-config-hint" style="font-size:12px;color:#6b7280;margin-bottom:12px;">填写后将作为工作流开始节点的入参；留空则使用节点默认配置。</div>
+      <div id="wf-input-custom-vars">${rows}</div>
     </div>
     <div class="wf-config-footer">
       <button onclick="closeWfInputConfig()" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:8px;background:white;color:#374151;cursor:pointer;font-size:13px;">取消</button>
-      <button onclick="saveWfInputConfig()" style="padding:8px 16px;border:none;border-radius:8px;background:#667eea;color:white;cursor:pointer;font-size:13px;font-weight:500;">确认</button>
+      <button onclick="saveWfInputConfig('${fields.map(f => f.name).join(',')}')" style="padding:8px 16px;border:none;border-radius:8px;background:#667eea;color:white;cursor:pointer;font-size:13px;font-weight:500;">运行</button>
     </div>
   </div>`;
   document.body.insertAdjacentHTML("beforeend", html);
@@ -5680,19 +5870,23 @@ function closeWfInputConfig() {
   if (el) el.remove();
 }
 
-function addWfInputCustomVar() {
-  const container = $("#wf-input-custom-vars");
-  if (!container) return;
-  const id = "cvar_" + Date.now();
-  container.insertAdjacentHTML("beforeend", `<div style="display:flex;gap:8px;margin-bottom:8px;" id="${id}">
-    <input placeholder="变量名" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
-    <input placeholder="默认值" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
-    <button onclick="$('#${id}').remove()" style="width:32px;height:32px;border:none;border-radius:6px;background:transparent;color:#ef4444;cursor:pointer;">✕</button>
-  </div>`);
-}
-
-function saveWfInputConfig() {
+function saveWfInputConfig(namesCSV) {
+  const names = (namesCSV || "").split(",").filter(Boolean);
+  const values = {};
+  for (const name of names) {
+    const el = $("#wf_inp_" + name);
+    if (!el) continue;
+    if (el.type === "checkbox") values[name] = el.checked;
+    else if (el.type === "number") values[name] = el.value === "" ? "" : Number(el.value);
+    else values[name] = el.value;
+  }
+  window._wfInputValues = values;
   closeWfInputConfig();
+  // 保存后自动运行一次（填完即跑）
+  window.__wfSkipInputModal = true;
+  if (currentWorkflow && window._wfLastTestText != null) {
+    executeWfTestWithMessage(window._wfLastTestText);
+  }
 }
 
 // 体验配置

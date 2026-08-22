@@ -1562,6 +1562,119 @@ def api_list_workflows():
     return workflow_mod.list_workflows_summary()
 
 
+def _wf_to_dsl(wf):
+    """工作流对象 → DSL（兼容主流格式）"""
+    nodes = wf.get("nodes", [])
+    edges = wf.get("edges", [])
+    dsl = {
+        "version": "1.0",
+        "name": wf.get("name", ""),
+        "description": wf.get("description", "") or "",
+        "tags": wf.get("tags", []) or [],
+        "enabled": bool(wf.get("enabled", True)),
+        "graph": {
+            "nodes": [
+                {
+                    "id": n.get("id", ""),
+                    "type": n.get("type", ""),
+                    "label": n.get("label", "") or n.get("type", ""),
+                    "config": n.get("config", {}) or {},
+                }
+                for n in nodes
+            ],
+            "edges": [
+                {
+                    "id": e.get("id", ""),
+                    "source": e.get("source") or e.get("from", ""),
+                    "target": e.get("target") or e.get("to", ""),
+                    "sourceHandle": e.get("sourceHandle"),
+                    "targetHandle": e.get("targetHandle"),
+                    "label": e.get("label"),
+                    "condition": e.get("condition"),
+                }
+                for e in edges
+            ],
+        },
+        "meta": {
+            "exported_at": time.time(),
+            "format": "abcode-dsl-v1",
+            "compatible": ["dify", "langflow", "n8n"],
+        },
+    }
+    return dsl
+
+
+def _dsl_to_wf(dsl, wid):
+    """DSL → 工作流对象"""
+    graph = dsl.get("graph") or dsl
+    raw_nodes = graph.get("nodes") or dsl.get("nodes") or []
+    raw_edges = graph.get("edges") or dsl.get("edges") or []
+    # 兼容 Dify / LangFlow 的扁平 nodes 数组
+    nodes = []
+    for n in raw_nodes:
+        nodes.append({
+            "id": n.get("id") or n.get("node_id") or _gen_wf_id(),
+            "type": n.get("type") or n.get("data", {}).get("type", "unknown"),
+            "label": n.get("label") or n.get("data", {}).get("label") or "",
+            "config": n.get("config") or n.get("data", {}).get("config") or n.get("data", {}) or {},
+        })
+    edges = []
+    for e in raw_edges:
+        edges.append({
+            "id": e.get("id") or _gen_wf_id(),
+            "source": e.get("source") or e.get("from", ""),
+            "target": e.get("target") or e.get("to", ""),
+            "sourceHandle": e.get("sourceHandle"),
+            "targetHandle": e.get("targetHandle"),
+            "label": e.get("label"),
+            "condition": e.get("condition"),
+        })
+    now = time.time()
+    return {
+        "id": wid,
+        "name": dsl.get("name") or "导入的工作流",
+        "description": dsl.get("description", "") or "",
+        "nodes": nodes,
+        "edges": edges,
+        "config": dsl.get("config") or {},
+        "enabled": dsl.get("enabled", True),
+        "tags": dsl.get("tags", []) or [],
+        "version": 1,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+@app.get("/api/workflows/{wid}/export")
+def api_export_workflow_dsl(wid: str):
+    """导出工作流 DSL（兼容 Dify / LangFlow / n8n 风格的 JSON 格式）"""
+    wf = db.get_workflow(wid)
+    if not wf:
+        raise HTTPException(404, "工作流不存在")
+    dsl = _wf_to_dsl(wf)
+    return JSONResponse(
+        dsl,
+        headers={"Content-Disposition": f"attachment; filename=workflow_{wid}.json"},
+    )
+
+
+@app.post("/api/workflows/{wid}/import")
+def api_import_workflow_dsl(wid: str, body: dict = Body(...)):
+    """导入 DSL（兼容 Dify / LangFlow / n8n 风格）"""
+    wf = _dsl_to_wf(body, wid)
+    db.save_workflow(wf)
+    return {"ok": True, "id": wid}
+
+
+@app.post("/api/workflows/import")
+def api_import_workflow_dsl_new(body: dict = Body(...)):
+    """导入 DSL 并生成新工作流 ID"""
+    wf_id = _gen_wf_id()
+    wf = _dsl_to_wf(body, wf_id)
+    db.save_workflow(wf)
+    return {"ok": True, "id": wf_id}
+
+
 @app.get("/api/workflows/{wid}")
 def api_get_workflow(wid: str):
     """获取工作流详情"""
@@ -1569,6 +1682,41 @@ def api_get_workflow(wid: str):
     if not wf:
         raise HTTPException(404, "工作流不存在")
     return wf
+
+
+@app.get("/api/workflows/{wid}/input_schema")
+def api_workflow_input_schema(wid: str):
+    """获取工作流开始节点的入参 schema（供前端动态生成表单，如 Dify / 百炼）"""
+    wf = db.get_workflow(wid)
+    if not wf:
+        raise HTTPException(404, "工作流不存在")
+    start_node = None
+    for n in wf.get("nodes", []):
+        if n.get("type") == "start":
+            start_node = n
+            break
+    fields = []
+    if start_node:
+        cfg = start_node.get("config", {}) or {}
+        # 结构化参数定义
+        for f in cfg.get("input_variables") or []:
+            if not f.get("name"):
+                continue
+            fields.append({
+                "name": f["name"],
+                "type": f.get("type", "string"),
+                "default": f.get("default", ""),
+                "required": bool(f.get("required", False)),
+                "options": f.get("options") or [],
+            })
+        # 兼容 legacy input_fields（逗号分隔字符串列表）→ string 类型
+        for f in (cfg.get("input_fields") or []):
+            if any(x["name"] == f for x in fields):
+                continue
+            fields.append({"name": f, "type": "string", "default": "",
+                           "required": False, "options": []})
+    return {"ok": True, "fields": fields,
+            "has_schema": len(fields) != 1 or (fields and fields[0]["type"] != "string")}
 
 
 def _gen_wf_id(length=15):
@@ -1582,6 +1730,27 @@ def api_save_workflow(body: dict):
     """保存工作流（创建或更新）"""
     wf_id = body.get("id") or _gen_wf_id()
     body["id"] = wf_id
+    if not body.get("created_at"):
+        body["created_at"] = time.time()
+    # 兼容 nodes/edges 以 JSON 字符串或数组两种形式提交，避免双重序列化
+    for k, fallback in (("nodes", []), ("edges", []), ("tags", []), ("config", {})):
+        v = body.get(k)
+        if isinstance(v, str):
+            try:
+                body[k] = json.loads(v)
+            except Exception:
+                body[k] = fallback
+        elif v is None:
+            body[k] = fallback
+    db.save_workflow(body)
+    return {"ok": True, "id": wf_id}
+
+
+@app.delete("/api/workflows/{wid}")
+def api_delete_workflow(wid: str):
+    """删除工作流"""
+    db.delete_workflow(wid)
+    return {"ok": True}
     if not body.get("created_at"):
         body["created_at"] = time.time()
     # 兼容 nodes/edges 以 JSON 字符串或数组两种形式提交，避免双重序列化
