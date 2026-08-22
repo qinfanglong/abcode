@@ -1255,6 +1255,7 @@ def execute_workflow(workflow_id, input_data=None):
         "duration_ms": execution["duration_ms"],
         "tokens_used": engine.tokens_used,
         "node_requests": getattr(engine, "node_requests", {}),
+        "node_results": engine.nodes_status,
     }
 
 
